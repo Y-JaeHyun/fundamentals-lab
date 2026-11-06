@@ -1,5 +1,6 @@
 import { logBlock } from '../../ui/badges';
 import { h } from '../../ui/dom';
+import { shuffle } from '../../ui/shuffle';
 import type { SimView } from '../registry';
 import { emptyState, isComplete, pickOption, type VerifierCase, type VerifierData } from './model';
 
@@ -29,13 +30,13 @@ export const verifierSim: SimView = {
       tabs.replaceChildren(
         ...data.cases.map((c, i) => {
           const b = h('button', { class: i === idx ? 'case current' : 'case', 'aria-pressed': String(i === idx) }, `${state.solved.includes(c.id) ? '✓ ' : ''}${i + 1}. ${c.title}`);
-          b.onclick = () => show(i);
+          b.onclick = () => show(i, 'tab');
           return b;
         }),
       );
     };
 
-    const show = (i: number) => {
+    const show = (i: number, focus?: 'options' | 'tab') => {
       idx = i;
       const c: VerifierCase = data.cases[i];
       drawTabs();
@@ -44,7 +45,7 @@ export const verifierSim: SimView = {
       const stages = h('div', {}, stageRow(1, 1));
       const fb = h('div', { class: 'fb', 'aria-live': 'polite' });
       const opts = h('div', { class: 'opts' });
-      c.options.forEach((o, oi) => {
+      shuffle(c.options.map((o, oi) => [o, oi] as const)).forEach(([o, oi]) => {
         const b = h('button', {}, o.text);
         b.onclick = () => {
           const r = pickOption(state, data, c.id, oi);
@@ -61,7 +62,7 @@ export const verifierSim: SimView = {
             drawTabs();
             if (i + 1 < data.cases.length) {
               const next = h('button', { class: 'next primary' }, '다음 케이스 →');
-              next.onclick = () => show(i + 1);
+              next.onclick = () => show(i + 1, 'options');
               fb.append(h('div', { class: 'row' }, next));
             }
             if (!completed && isComplete(state, data)) {
@@ -80,6 +81,9 @@ export const verifierSim: SimView = {
       body.replaceChildren(
         h('div', { class: 'grid2' }, h('div', { class: 'stack' }, codeWrap, logWrap), h('div', { class: 'stack' }, h('h3', {}, c.title), opts, fb, stages)),
       );
+      // 다시 그리면 누르던 버튼이 사라지므로 키보드 포커스를 이어 준다
+      if (focus === 'tab') tabs.querySelectorAll<HTMLButtonElement>('button')[i]?.focus();
+      else if (focus === 'options') opts.querySelector<HTMLButtonElement>('button')?.focus();
     };
     show(0);
     return () => {};

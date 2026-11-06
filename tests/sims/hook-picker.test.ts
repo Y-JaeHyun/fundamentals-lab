@@ -67,3 +67,16 @@ test('view: only mission hooks are clickable and completing all missions calls o
   el.querySelector<HTMLButtonElement>('button.hook[data-hook="xdp"]')!.click();
   expect(onComplete).toHaveBeenCalledTimes(1);
 });
+
+test('view: keyboard focus moves to an enabled hook after "다음 미션"', async () => {
+  const el = document.createElement('div');
+  document.body.append(el);
+  hookPickerSim.mount(el, data, { course: {} as Course, chapter: {} as Chapter, onComplete: () => {} });
+  el.querySelector<HTMLButtonElement>('button.hook[data-hook="cgroup-connect4"]')!.click();
+  await new Promise((r) => setTimeout(r, 800)); // 문서에 붙어 있으면 결과가 0.7초 뒤 표시된다
+  el.querySelector<HTMLButtonElement>('button.next')!.click();
+  const a = document.activeElement as HTMLButtonElement | null;
+  el.remove();
+  expect(a?.classList.contains('hook')).toBe(true);
+  expect(a?.disabled).toBe(false);
+});

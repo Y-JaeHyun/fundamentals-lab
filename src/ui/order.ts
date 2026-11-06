@@ -1,13 +1,10 @@
 import { h } from './dom';
+import { shuffle } from './shuffle';
 
 function shuffled(items: string[]): string[] {
   if (items.length < 2) return [...items];
   for (;;) {
-    const a = [...items];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
+    const a = shuffle(items);
     if (a.some((x, i) => x !== items[i])) return a;
   }
 }

@@ -35,7 +35,8 @@ test('marks progress when quiz answered', () => {
   const el = document.createElement('div');
   const s = store();
   renderChapter(el, c, ch, s);
-  el.querySelector<HTMLButtonElement>('.question .opts button')!.click(); // helpers: 첫 보기가 정답
+  // 보기 순서는 섞이므로 텍스트로 찾는다 (helpers: '보기0'이 정답)
+  [...el.querySelector('.question')!.querySelectorAll<HTMLButtonElement>('.opts button')].find((b) => b.textContent === '보기0')!.click();
   expect(s.get('ebpf', '05').answers.q1).toBe(true);
 });
 

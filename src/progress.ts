@@ -46,8 +46,15 @@ export function createProgressStore(storage: Storage | null): ProgressStore {
   const data = read(storage);
   const key = (c: string, ch: string) => `${c}/${ch}`;
   const entry = (c: string, ch: string) => (data[key(c, ch)] ??= { sim: false, answers: {} });
+  // 다른 탭이 그 사이에 쓴 진행도를 잃지 않도록, 쓰기 직전에 다시 읽어 합친다(완료 표시는 늘기만 한다).
   const save = () => {
     try {
+      const latest = read(storage);
+      for (const [k, p] of Object.entries(latest)) {
+        const mine = (data[k] ??= { sim: false, answers: {} });
+        mine.sim ||= p.sim;
+        Object.assign(mine.answers, p.answers);
+      }
       storage?.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       /* 저장 불가 환경: 이번 방문 동안만 유지 */

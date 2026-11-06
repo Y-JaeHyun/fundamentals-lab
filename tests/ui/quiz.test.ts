@@ -18,7 +18,9 @@ function setup() {
   const el = document.createElement('div');
   const onCorrect = vi.fn();
   renderQuestion(el, q, onCorrect);
-  const buttons = [...el.querySelectorAll<HTMLButtonElement>('.opts button')];
+  // 보기 순서는 섞이므로 [정답, 오답] 순으로 맞춰 돌려준다
+  const all = [...el.querySelectorAll<HTMLButtonElement>('.opts button')];
+  const buttons = ['NULL 검사 추가', 'volatile'].map((t) => all.find((b) => b.textContent === t)!);
   return { el, onCorrect, buttons };
 }
 
@@ -51,4 +53,15 @@ test('options are buttons reachable by keyboard', () => {
 test('shows question log as measured', () => {
   const { el } = setup();
   expect(el.querySelector('pre.log')?.textContent).toBe('R0 invalid mem access');
+});
+
+test('option order is shuffled across renders', () => {
+  const four: Question = { ...q, options: [q.options[0], { text: 'b', feedback: 'x' }, { text: 'c', feedback: 'x' }, { text: 'd', feedback: 'x' }] };
+  const positions = new Set<number>();
+  for (let i = 0; i < 60; i++) {
+    const el = document.createElement('div');
+    renderQuestion(el, four, () => {});
+    positions.add([...el.querySelectorAll('.opts button')].findIndex((b) => b.textContent === 'NULL 검사 추가'));
+  }
+  expect(positions.size).toBeGreaterThan(2);
 });

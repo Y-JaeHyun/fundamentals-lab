@@ -2,6 +2,7 @@ import type { Question } from '../content/schema';
 import { logBlock } from './badges';
 import { h } from './dom';
 import { renderOrder } from './order';
+import { shuffle } from './shuffle';
 
 export function renderQuestion(el: HTMLElement, q: Question, onCorrect: () => void): void {
   let done = false;
@@ -27,7 +28,7 @@ export function renderQuestion(el: HTMLElement, q: Question, onCorrect: () => vo
   if (q.log) box.append(logBlock(q.log));
   const opts = h('div', { class: 'opts' });
   const fb = h('div', { class: 'fb', 'aria-live': 'polite' });
-  q.options.forEach((o) => {
+  shuffle(q.options).forEach((o) => {
     const b = h('button', {}, o.text);
     b.onclick = () => {
       opts.querySelectorAll('button.wrong').forEach((x) => x.classList.remove('wrong'));

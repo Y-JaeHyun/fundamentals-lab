@@ -64,7 +64,10 @@ export const hookPickerSim: SimView = {
         if (r.outcome.measured) fb.append(h('div', { class: 'logwrap' }, measuredBadge(), h('pre', { class: 'log' }, r.outcome.measured)));
         if (r.correct && idx + 1 < data.missions.length) {
           const next = h('button', { class: 'next primary' }, '다음 미션 →');
-          next.onclick = () => showMission(idx + 1);
+          next.onclick = () => {
+            showMission(idx + 1);
+            data.missions[idx].hooks.map((id) => buttons.get(id)!).find((b) => !b.disabled)?.focus();
+          };
           fb.append(h('div', { class: 'row' }, next));
         }
         if (r.correct && !completed && isPickComplete(state, data)) {

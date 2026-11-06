@@ -62,3 +62,15 @@ test('persists across store instances', () => {
   createProgressStore(st).markSim('ebpf', '05');
   expect(createProgressStore(st).get('ebpf', '05').sim).toBe(true);
 });
+
+test('two tabs writing different chapters keep both', () => {
+  const st = mem();
+  const tabA = createProgressStore(st);
+  const tabB = createProgressStore(st);
+  tabA.markCorrect('ebpf', '04', 'q1');
+  tabB.markCorrect('ebpf', '05', 'q2');
+  tabB.markSim('ebpf', '04');
+  const fresh = createProgressStore(st);
+  expect(fresh.get('ebpf', '04')).toEqual({ sim: true, answers: { q1: true } });
+  expect(fresh.get('ebpf', '05').answers.q2).toBe(true);
+});
