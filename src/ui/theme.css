@@ -168,3 +168,16 @@ button.scenario[aria-pressed="true"] { border-color: var(--accent); background: 
 .stage.drop { border-color: var(--bad); background: var(--bad-soft); }
 .stage.drop .v::after { content: " ✕ 버림"; color: var(--bad); font-weight: 600; }
 .stage.skipped { opacity: .4; border-style: dashed; }
+
+/* 버퍼 유실 */
+.slider-row label { font-size: .88rem; }
+.slider-row input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+.slider-row output { font-family: var(--f-mono); font-size: .85rem; font-variant-numeric: tabular-nums; }
+button[data-buffer][aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar { display: grid; grid-template-columns: minmax(120px, 170px) 1fr minmax(130px, auto); gap: 10px; align-items: center; }
+@media (max-width: 560px) { .bar { grid-template-columns: 1fr; gap: 2px; } }
+.bar .name { font-size: .85rem; }
+.bar .bar-track { height: 14px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); overflow: hidden; }
+.bar .fill { display: block; height: 100%; background: var(--bad); transition: width .25s; }
+.bar .num { font-family: var(--f-mono); font-size: .8rem; font-variant-numeric: tabular-nums; }

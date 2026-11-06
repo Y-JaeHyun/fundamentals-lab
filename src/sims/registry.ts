@@ -1,4 +1,5 @@
 import type { Chapter, Course, SimKind } from '../content/schema';
+import { bufferLossSim } from './buffer-loss/view';
 import { hookPickerSim } from './hook-picker/view';
 import { orderSim } from './order/view';
 import { packetTimelineSim } from './packet-timeline/view';
@@ -22,6 +23,7 @@ const views: Partial<Record<SimKind, SimView>> = {
   verifier: verifierSim,
   'hook-picker': hookPickerSim,
   'packet-timeline': packetTimelineSim,
+  'buffer-loss': bufferLossSim,
 };
 
 export function getSim(kind: SimKind): SimView | undefined {
