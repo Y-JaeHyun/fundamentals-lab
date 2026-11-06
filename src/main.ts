@@ -6,6 +6,12 @@ import { simValidators } from './sims/node-registry';
 import { renderChapter } from './ui/chapter-view';
 import { h } from './ui/dom';
 import { renderMap } from './ui/map-view';
+import '@fontsource/do-hyeon/400.css';
+import '@fontsource/ibm-plex-sans-kr/400.css';
+import '@fontsource/ibm-plex-sans-kr/500.css';
+import '@fontsource/ibm-plex-sans-kr/700.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/600.css';
 import './ui/theme.css';
 
 function storage(): Storage | null {

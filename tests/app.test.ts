@@ -12,3 +12,11 @@ test('app boots to map and navigates to a chapter', async () => {
   window.dispatchEvent(new HashChangeEvent('hashchange'));
   expect(document.querySelectorAll('a.cell').length).toBeGreaterThan(0);
 });
+
+test('no runtime requests to external hosts (fonts are bundled)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const html = readFileSync(join(import.meta.dirname, '../index.html'), 'utf8');
+  const css = readFileSync(join(import.meta.dirname, '../src/ui/theme.css'), 'utf8');
+  expect(html + css).not.toMatch(/https?:\/\/(?!github\.com)/);
+});
