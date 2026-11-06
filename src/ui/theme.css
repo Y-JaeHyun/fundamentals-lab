@@ -144,3 +144,15 @@ pre.code.lines .ln.fix { background: rgba(76, 198, 140, .2); box-shadow: inset 3
 .stages span.on { background: var(--good-soft); color: var(--good); border-color: var(--good); }
 .stages span.fail { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
 .kernel-says.ok { color: var(--good); }
+
+/* hook 고르기 */
+.mission .q { font-size: 1.05rem; font-weight: 500; }
+.lane-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 680px; }
+.lane-wrap .lbl { font-size: .72rem; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.lane { position: relative; display: flex; gap: 6px; align-items: stretch; padding-top: 12px; }
+button.hook { flex: 1; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: 10px; font-size: .85rem; min-width: 0; border-color: var(--accent); background: var(--accent-soft); }
+button.hook small { font-family: var(--f-mono); font-size: .68rem; color: var(--muted); }
+button.hook:disabled { opacity: .5; border-style: dashed; border-color: var(--line); background: transparent; }
+button.hook.right { border-color: var(--good); background: var(--good-soft); opacity: 1; }
+button.hook.wrong { border-color: var(--bad); background: var(--bad-soft); opacity: 1; }
+.pkt { position: absolute; top: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); left: 0; transition: left .7s cubic-bezier(.5, 0, .3, 1); pointer-events: none; }

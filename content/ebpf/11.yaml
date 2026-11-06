@@ -1,0 +1,120 @@
+id: '11'
+slug: 11-tc-cgroup
+title: TC와 cgroup 소켓 hook
+summary: 나가는 트래픽을 막는 자리는 둘이에요. TC egress는 패킷을, cgroup hook은 시스템 콜을 봐요.
+sim:
+  kind: hook-picker
+  data:
+    missions:
+    - id: eperm
+      prompt: 이 cgroup(컨테이너) 안의 앱이 192.0.2.2:8080으로 TCP 연결하면, 앱이 바로 실패 이유를 알 수 있게 막으세요.
+      hooks:
+      - cgroup-connect4
+      - tc-egress
+      answer: cgroup-connect4
+      outcomes:
+        cgroup-connect4:
+          text: 정답. connect() 시스템 콜 안에서 0을 반환하면 앱은 즉시 EPERM을 받아요. 패킷은 만들어지지도 않아요.
+          measured: 'TCP connect 192.0.2.2:8080   실패: operation not permitted (EPERM), 159.4µs'
+        tc-egress:
+          text: 막히긴 해요. 하지만 SYN이 조용히 사라질 뿐이라 앱은 재전송하며 기다리다 타임아웃으로 끝나요. 거부인지, 상대가 꺼진 건지 앱은 구별할 수 없어요.
+          measured: 'TCP connect 192.0.2.2:8080   실패: 시간 초과, 2.5s'
+    - id: redirect
+      prompt: 앱 코드는 그대로 두고, 192.0.2.2:80으로의 연결이 앱 모르게 :8081 서버로 가게 하세요.
+      hooks:
+      - cgroup-connect4
+      - tc-egress
+      answer: cgroup-connect4
+      outcomes:
+        cgroup-connect4:
+          text: 정답. connect4 프로그램이 bpf_sock_addr의 user_port를 바꾸면 커널이 바뀐 주소로 연결해요. Cilium의 소켓 기반 로드밸런싱이 이 원리예요.
+          measured: 'TCP connect 192.0.2.2:80     성공: 실제 연결된 상대 192.0.2.2:8081, 231µs'
+        tc-egress:
+          text: TC egress는 나가는 패킷을 보고 버리거나 넘겨요. 연결이 맺어지기 전 시스템 콜 단계에서 목적지를 바꾸는 건 connect4 자리예요.
+    - id: udp-sendto
+      prompt: connect하지 않은 UDP 소켓이 192.0.2.2:9000으로 sendto() 하는 걸 막고, 앱이 EPERM을 받게 하세요.
+      hooks:
+      - cgroup-sendmsg4
+      - cgroup-connect4
+      - tc-egress
+      answer: cgroup-sendmsg4
+      outcomes:
+        cgroup-sendmsg4:
+          text: 정답. connect하지 않은 UDP 소켓의 sendto()/sendmsg()는 호출마다 sendmsg4를 거쳐요.
+          measured: 'UDP sendto       192.0.2.2:9000   실패: operation not permitted (EPERM), 196.6µs'
+        cgroup-connect4:
+          text: connect()를 부르지 않았으니 connect4는 지나가지 않아요. 반대로 connect+send하는 UDP는 connect4에서 막혀요. 그래서 둘 다 붙여야 UDP를 빠짐없이 막아요.
+        tc-egress:
+          text: TC egress는 패킷을 보는 자리라 시스템 콜에 EPERM을 돌려주지 못해요.
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+questions:
+- id: tc-timeout
+  kind: choice
+  prompt: TC egress로 :8080 SYN을 버렸더니 tcegress 출력이 이랬어요. 앱 입장에서는 무슨 일이 벌어진 걸까요?
+  log: |
+    +0.000s  버림  192.0.2.1:38708 → 192.0.2.2:8080  [SYN]
+    +1.022s  버림  192.0.2.1:38708 → 192.0.2.2:8080  [SYN]
+    +1.527s  버림  192.0.2.1:38708 → 192.0.2.2:8080  [SYN]
+    +2.030s  버림  192.0.2.1:38708 → 192.0.2.2:8080  [SYN]
+  options:
+  - text: 커널이 SYN을 재전송했지만 모두 버려져 결국 시간 초과로 끝났다
+    correct: true
+    feedback: 맞아요. 앱이 받은 정보는 "시간 초과"뿐이에요. 재전송 간격은 커널·sysctl마다 달라요(여기선 kernel 6.17 기준).
+  - text: 앱이 즉시 EPERM을 받았다
+    feedback: EPERM은 cgroup hook에서 시스템 콜을 거부했을 때예요. TC는 패킷만 버려요.
+  - text: 앱이 connection refused를 받았다
+    feedback: refused는 상대가 RST를 보냈을 때예요. 여기선 SYN이 아예 나가지 못했어요.
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+- id: udp-two-hooks
+  kind: choice
+  prompt: UDP를 막으려고 sendmsg4만 붙였어요. 무엇이 빠져나갈까요?
+  options:
+  - text: 아무것도. sendmsg4가 모든 UDP를 본다
+    feedback: connect()한 UDP 소켓의 send()는 sendmsg4를 거치지 않아요.
+  - text: connect()한 UDP 소켓의 send()
+    correct: true
+    feedback: 맞아요. 이 장 결과처럼 connect4에서도 UDP를 처리해야 해요. 실험에서 sendto는 sendmsg4에서, connect+send는 connect4에서 막혔어요.
+    log: |
+      UDP connect+send 192.0.2.2:9000   실패: operation not permitted (EPERM), 67.8µs
+  - text: TCP 연결
+    feedback: TCP는 원래 connect4가 담당해요. 질문은 UDP 이야기예요.
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+- id: outside-cgroup
+  kind: choice
+  prompt: 같은 netns에 있지만 그 cgroup 밖에 있는 프로세스가 192.0.2.2:8080에 연결하면 어떻게 될까요?
+  options:
+  - text: 똑같이 EPERM을 받는다
+    feedback: cgroup hook은 붙인 cgroup 안의 프로세스에만 적용돼요.
+  - text: 정상적으로 연결된다
+    correct: true
+    feedback: 맞아요. 정책이 cgroup 단위라서, 같은 netns에서도 cgroup 밖 프로세스는 영향을 받지 않았어요.
+    log: |
+      TCP connect 192.0.2.2:8080   성공: 실제 연결된 상대 192.0.2.2:8080, 262µs
+  - text: 타임아웃으로 끝난다
+    feedback: 타임아웃은 TC에서 패킷을 버렸을 때의 모습이에요.
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+- id: retval
+  kind: choice
+  prompt: cgroup/connect4 프로그램의 반환값은 무슨 뜻일까요?
+  options:
+  - text: 0 = 허용, 1 = 거부
+    feedback: 반대예요.
+  - text: 1 = 허용, 0 = 거부(EPERM)
+    correct: true
+    feedback: 맞아요. 그리고 struct bpf_sock_addr의 user_ip4·user_port는 네트워크 바이트 순서이고, 쓰면 커널이 바뀐 주소로 진행해요.
+  - text: TC처럼 TC_ACT_SHOT을 반환해야 거부된다
+    feedback: TC_ACT_*는 TC 프로그램의 반환값이에요. cgroup 소켓 hook은 1/0이에요.
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+run:
+  cmd: make -C chapters/11-tc-cgroup/code build run
+  expect: |
+    TCP connect 192.0.2.2:8080   실패: 시간 초과, 2.5s
+    TCP connect 192.0.2.2:8080   실패: operation not permitted (EPERM), 159.4µs
+  sources:
+  - path: chapters/11-tc-cgroup/README.md
+

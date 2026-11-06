@@ -1,0 +1,89 @@
+id: '10'
+slug: 10-xdp-afxdp
+title: XDP와 AF_XDP
+summary: XDP는 드라이버가 패킷을 받자마자 돌아요. 정책은 map에 두고, AF_XDP로 커널 스택을 건너뛸 수도 있어요.
+sim:
+  kind: hook-picker
+  data:
+    missions:
+    - id: blocklist
+      prompt: 192.0.2.1에서 오는 패킷을 가장 앞단에서 버리세요. 차단 목록은 프로그램을 다시 올리지 않고 실행 중에 바꿀 수 있어야 해요.
+      hooks:
+      - xdp
+      - tc-ingress
+      - netfilter
+      answer: xdp
+      outcomes:
+        xdp:
+          text: 정답. XDP 프로그램이 blocklist map을 보고 XDP_DROP 해요. bpftool map update 한 줄로 차단하자 ping 5개가 전부 사라졌고, 해제하자 다시 통과했어요.
+          measured: 5 packets transmitted, 0 received, 100% packet loss, time 831ms
+        tc-ingress:
+          text: 버릴 수는 있어요. 하지만 TC는 sk_buff를 만든 뒤라 XDP보다 뒤예요. 앞에서 버릴수록 sk_buff 할당·라우팅·소켓 조회 비용을 아껴요.
+        netfilter:
+          text: iptables와 같은 자리라 스택을 꽤 많이 지난 뒤예요. 대량 차단이라면 가장 앞단인 XDP가 맞아요.
+    - id: afxdp
+      prompt: UDP :9000 패킷만 커널 네트워크 스택(IP·UDP 처리, 소켓 큐)을 건너뛰고 내 사용자 공간 프로그램이 바로 받게 하세요. ping은 평소대로 커널이 처리해야 해요.
+      hooks:
+      - xdp
+      - tc-ingress
+      - socket-filter
+      answer: xdp
+      outcomes:
+        xdp:
+          text: 정답. XDP가 bpf_redirect_map(XSKMAP)으로 UDP :9000만 AF_XDP 소켓에 넘기고 나머지는 XDP_PASS 해요. 같은 포트를 연 보통 UDP 소켓은 한 개도 받지 못했어요.
+          measured: '#1  umem주소=0x000100 길이=57  192.0.2.1:46652 → 192.0.2.2:9000  "hello AF_XDP #1"'
+        tc-ingress:
+          text: AF_XDP 소켓으로 보내는 건 XDP_REDIRECT + XSKMAP이에요. TC는 이미 sk_buff를 만든 커널 스택 안쪽이에요.
+        socket-filter:
+          text: 소켓 필터는 커널 스택을 다 지난 뒤 소켓 하나에서 돌아요. 건너뛴 게 아니라 끝까지 간 거예요.
+  sources:
+  - path: chapters/10-xdp-afxdp/README.md
+  - path: chapters/09-packet-path/README.md
+questions:
+- id: policy-in-map
+  kind: choice
+  prompt: xdpfw 예제는 차단할 IP를 코드가 아니라 map에 넣었어요. 왜일까요?
+  options:
+  - text: map 접근이 코드 분기보다 빠르기 때문
+    feedback: map 조회 자체는 공짜가 아니에요. 핵심은 운영 중에 바꿀 수 있다는 점이에요.
+  - text: 프로그램을 다시 올리지 않고 실행 중에 정책을 바꿀 수 있어서
+    correct: true
+    feedback: 맞아요. map을 bpffs에 pin해 두면 bpftool map update 한 줄로 차단·해제할 수 있어요.
+  - text: verifier가 if 문을 허용하지 않아서
+    feedback: verifier는 범위가 증명되는 분기를 잘 허용해요. 정책을 map에 두는 건 운영상의 이유예요.
+  sources:
+  - path: chapters/10-xdp-afxdp/README.md
+- id: generic-mode
+  kind: choice
+  prompt: XDP를 generic(skb) 모드로 붙였어요. 어떤 점을 알아야 할까요?
+  options:
+  - text: native와 성능이 같다
+    feedback: generic은 sk_buff를 만든 뒤 공용 코드에서 돌아요.
+  - text: 어떤 인터페이스에서나 되지만 sk_buff 비용을 이미 치른 뒤라 성능 이점이 작다. 기능 시험용이다
+    correct: true
+    feedback: 맞아요. 성능 이점은 드라이버에서 도는 native 모드에서 나와요. veth, virtio_net, 주요 서버 NIC 드라이버 대부분이 native를 지원해요.
+  - text: NIC 하드웨어에서 돈다
+    feedback: 그건 offload 모드예요. 일부 SmartNIC만 지원해요.
+  sources:
+  - path: chapters/10-xdp-afxdp/README.md
+- id: afxdp-normal-socket
+  kind: choice
+  prompt: AF_XDP로 UDP :9000을 가져가는 동안, 같은 포트를 연 보통 UDP 소켓은 패킷을 몇 개 받았을까요?
+  options:
+  - text: 전부 받는다(복사본)
+    feedback: AF_XDP로 redirect된 패킷은 커널 스택에 올라가지 않아요.
+  - text: 한 개도 받지 못한다
+    correct: true
+    feedback: 맞아요. 커널 스택을 건너뛰었으니 보통 소켓까지 갈 패킷이 없어요. 나머지(ping)는 XDP_PASS로 평소대로 처리됐어요.
+  - text: 절반쯤 받는다
+    feedback: 선택 기준(UDP :9000)에 맞는 패킷은 전부 AF_XDP 소켓으로 갔어요.
+  sources:
+  - path: chapters/10-xdp-afxdp/README.md
+run:
+  cmd: make -C chapters/10-xdp-afxdp/code build run
+  expect: |
+    5 packets transmitted, 0 received, 100% packet loss, time 831ms
+    #1  umem주소=0x000100 길이=57  192.0.2.1:46652 → 192.0.2.2:9000  "hello AF_XDP #1"
+  sources:
+  - path: chapters/10-xdp-afxdp/README.md
+
