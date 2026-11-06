@@ -1,0 +1,84 @@
+id: '02'
+slug: 02-bpftrace
+title: bpftrace로 맛보기
+summary: 프로브 /필터/ { 동작 } 한 줄로 커널을 들여다봐요. @ 변수는 map이고, 집계는 커널 안에서 해요.
+questions:
+  - id: filter-part
+    kind: choice
+    prompt: 이 one-liner에서 실패(음수)와 EOF(0)를 걸러 내는 부분은 어디일까요?
+    code: |
+      tracepoint:syscalls:sys_exit_read /args.ret > 0/ { @bytes = hist(args.ret); }
+    options:
+      - text: tracepoint:syscalls:sys_exit_read
+        feedback: 이건 프로브예요. 어디에 붙을지만 정해요.
+      - text: /args.ret > 0/
+        correct: true
+        feedback: 맞아요. 슬래시 사이가 필터예요. 조건이 참일 때만 동작이 실행돼요.
+      - text: hist(args.ret)
+        feedback: hist()는 2의 거듭제곱 구간으로 세는 집계 함수예요. 거르지는 않아요.
+    sources:
+      - path: chapters/02-bpftrace/README.md
+  - id: execsnoop-comm
+    kind: choice
+    prompt: execsnoop으로 ls, uname, date 실행을 잡았는데 comm 열이 전부 sh예요. 왜일까요?
+    log: |
+      2884782  sh               /usr/bin/ls
+      2884783  sh               /usr/bin/uname
+    options:
+      - text: comm은 execve를 호출한 쪽의 이름이고, 진입 시점에는 아직 새 프로그램으로 바뀌기 전이라서
+        correct: true
+        feedback: 맞아요. 부하 스크립트를 실행한 sh가 execve를 불렀어요. 실행될 파일은 args.filename으로 봐요.
+      - text: bpftrace가 comm을 잘못 읽는 버그라서
+        feedback: 의도된 동작이에요. sys_enter 시점에는 프로세스가 아직 sh예요.
+      - text: ls, uname, date가 모두 실패해서
+        feedback: 진입 tracepoint는 실패한 execve도 찍지만, comm이 sh인 이유는 그게 아니에요. 호출한 쪽 이름이라서예요.
+    sources:
+      - path: chapters/02-bpftrace/README.md
+  - id: count-overhead
+    kind: choice
+    prompt: syscount가 dd의 시스템 콜 4만 회를 세었어요. 이렇게 세어도 오버헤드가 작은 이유는?
+    log: |
+      @syscalls[dd]: 40069
+    options:
+      - text: 이벤트마다 사용자 공간으로 넘겨 bpftrace가 더하기 때문에
+        feedback: 반대예요. 갱신은 전부 커널 안에서 일어나고, 사용자 공간으로는 종료 시 결과만 한 번 넘어와요.
+      - text: 샘플링이라 일부 이벤트만 세기 때문에
+        feedback: count()는 샘플링이 아니에요. 모든 이벤트를 세요.
+      - text: count()가 CPU마다 따로 세는 per-CPU 값을 써서 경합이 없고, 결과는 종료 시 한 번만 넘어오기 때문에
+        correct: true
+        feedback: 맞아요. 출력할 때 bpftrace가 CPU별 값을 합산해요.
+    sources:
+      - path: chapters/02-bpftrace/README.md
+  - id: forget-delete
+    kind: choice
+    prompt: opensnoop처럼 진입에서 @fname[tid]에 저장하고 종료에서 꺼내 쓰는데, delete()를 빼먹었어요. 무슨 일이 생길까요?
+    options:
+      - text: 아무 문제 없다. bpftrace가 알아서 지운다
+        feedback: 자동으로 지우지 않아요. 키가 계속 쌓여요.
+      - text: map이 계속 커지다가 BPFTRACE_MAX_MAP_KEYS(기본 4096)에 걸린다
+        correct: true
+        feedback: 맞아요. 진입/종료 짝 맞추기에서는 꺼내 쓴 뒤 꼭 delete()로 지워요.
+      - text: 종료 프로브가 실행되지 않는다
+        feedback: 종료 프로브는 실행돼요. 문제는 지우지 않은 키가 map에 쌓이는 거예요.
+    sources:
+      - path: chapters/02-bpftrace/README.md
+  - id: probe-choice
+    kind: choice
+    prompt: 같은 정보를 tracepoint로도, kprobe로도 볼 수 있어요. 무엇을 먼저 쓰는 게 좋을까요?
+    options:
+      - text: kprobe. 어떤 커널 함수에도 붙을 수 있어서 더 낫다
+        feedback: 강력하지만, 커널이 바뀌면 함수가 인라인되거나 이름이 바뀌어 스크립트가 깨질 수 있어요.
+      - text: 둘은 안정성이 같으니 아무거나 써도 된다
+        feedback: tracepoint는 형식이 거의 안 바뀌어 안정성이 높고, kprobe는 낮아요.
+      - text: tracepoint. 형식이 거의 안 바뀌어 안정성이 높다
+        correct: true
+        feedback: 맞아요. tracepoint가 있으면 tracepoint를 먼저 쓰고, 없을 때 kprobe를 써요.
+    sources:
+      - path: chapters/02-bpftrace/README.md
+run:
+  cmd: make -C chapters/02-bpftrace/code run
+  expect: |
+    Attaching 2 probes...
+    bye
+  sources:
+    - path: chapters/02-bpftrace/README.md

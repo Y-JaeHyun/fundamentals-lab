@@ -1,0 +1,210 @@
+id: '05'
+slug: 05-verifier
+title: Verifier
+summary: verifier는 실행하지 않고 모든 경로를 따라가며 안전을 증명해요. 거부 로그는 마지막 두 줄부터.
+sim:
+  kind: verifier
+  data:
+    cases:
+    - id: null-check
+      title: map에서 꺼낸 값을 바로 썼다
+      code: |
+        u32 key = bpf_get_current_pid_tgid() >> 32;
+        u64 *v = bpf_map_lookup_elem(&cnt, &key);
+        *v += 1;
+        return 0;
+      hot: 3
+      fixed: "u32 key = bpf_get_current_pid_tgid() >> 32;\nu64 *v = bpf_map_lookup_elem(&cnt, &key);\nif (!v)\n\treturn 0;\n*v += 1;\nreturn 0;\n"
+      badLog: |
+        7: (85) call bpf_map_lookup_elem#1    ; R0=map_value_or_null(id=1,map=cnt,ks=4,vs=8)
+        8: (79) r1 = *(u64 *)(r0 +0)
+        R0 invalid mem access 'map_value_or_null'
+      goodLog: |
+        good: 통과 — processed 15 insns (limit 1000000) …
+      options:
+      - text: lookup 바로 다음에 if (!v) return 0; 을 넣는다
+        correct: true
+        feedback: 맞아요. lookup은 키가 없으면 NULL을 돌려줘요. verifier는 r0를 map_value_or_null로 기억하다가, NULL 검사를 통과한 분기에서만 map_value로 바꿔 줘요.
+      - text: v를 volatile로 선언한다
+        feedback: volatile은 컴파일러 최적화만 바꿔요. verifier가 보는 r0의 타입은 여전히 map_value_or_null이라 증명이 안 돼요.
+      - text: '*v += 1 대신 __sync_fetch_and_add(v, 1)를 쓴다'
+        feedback: 원자적 연산도 v가 가리키는 메모리를 건드리는 건 같아요. 01장의 bad-null 예제가 바로 이 형태로 같은 메시지를 받아요.
+        log: |
+          8: (db) lock *(u64 *)(r0 +0) += r1
+          R0 invalid mem access 'map_value_or_null'
+    - id: bounds
+      title: 시스템 콜 인자를 배열 인덱스로 썼다
+      code: |
+        u64 idx = ctx->args[2]; // read()의 count — 어떤 값이든 올 수 있다
+        struct slots *s = bpf_map_lookup_elem(&hist, &zero);
+        if (!s)
+        return 0;
+        s->v[idx] += 1;
+      hot: 5
+      fixed: |
+        u64 idx = ctx->args[2]; // read()의 count — 어떤 값이든 올 수 있다
+        struct slots *s = bpf_map_lookup_elem(&hist, &zero);
+        if (!s)
+        return 0;
+        if (idx >= 16)
+        return 0;
+        s->v[idx] += 1;
+      badLog: |
+        9: (67) r6 <<= 3                      ; R6_w=scalar(smax=0x7ffffffffffffff8,umax=0xfffffffffffffff8,…)
+        10: (0f) r0 += r6
+        math between map_value pointer and register with unbounded min value is not allowed
+      options:
+      - text: idx를 u32로 바꾼다
+        feedback: u32도 최대 약 42억이에요. 16칸 배열(v[16]) 안이라는 걸 증명하지 못하는 건 똑같아요.
+      - text: 접근 전에 if (idx >= 16) return 0; 을 넣는다
+        correct: true
+        feedback: 맞아요. 비교 이후 분기에서 verifier는 idx의 umax를 15로 추적하고, 오프셋이 0..120 바이트 안이라는 걸 알게 돼요.
+      - text: if (!s) 검사를 한 번 더 한다
+        feedback: s는 이미 NULL 검사를 통과했어요. 문제는 s가 아니라 범위를 모르는 idx예요.
+    - id: unreleased-ref
+      title: ring buffer 자리를 잡고 그냥 반환했다
+      code: |
+        u64 *e = bpf_ringbuf_reserve(&rb, sizeof(u64), 0);
+        if (!e)
+        return 0;
+        if (ctx->args[2] == 0) { // 0바이트 read는 기록하지 않으려 했다
+        return 0;
+        }
+        *e = ctx->args[2];
+        bpf_ringbuf_submit(e, 0);
+      hot: 5
+      fixed: |
+        u64 *e = bpf_ringbuf_reserve(&rb, sizeof(u64), 0);
+        if (!e)
+        return 0;
+        if (ctx->args[2] == 0) { // 0바이트 read는 기록하지 않으려 했다
+        bpf_ringbuf_discard(e, 0);
+        return 0;
+        }
+        *e = ctx->args[2];
+        bpf_ringbuf_submit(e, 0);
+      badLog: |
+        Unreleased reference id=2 alloc_insn=5
+        BPF_EXIT instruction in main prog would lead to reference leak
+      options:
+      - text: return 0 앞에 bpf_ringbuf_discard(e, 0); 를 넣는다
+        correct: true
+        feedback: 맞아요. reserve가 돌려준 메모리는 참조라서, 모든 exit 경로에서 submit이든 discard든 해서 참조를 0개로 만들어야 해요.
+      - text: return 0 대신 return 1 로 바꾼다
+        feedback: 반환값은 상관없어요. 그 경로에서 참조가 여전히 남아 있어요(alloc_insn=5에서 만든 참조).
+      - text: return 0 앞에 e = NULL; 을 넣는다
+        feedback: 포인터 변수를 지워도 ring buffer의 그 자리는 잠긴 채예요. verifier는 참조를 해제하는 helper 호출을 기다려요.
+    - id: ctx-write
+      title: tracepoint 컨텍스트에 값을 썼다
+      code: |
+        if (ctx->args[2] > 4096)
+        ctx->args[2] = 4096;
+        count = ctx->args[2];
+      hot: 2
+      fixed: |
+        count = ctx->args[2];
+        if (count > 4096)
+        count = 4096; // 지역 변수에서 가공한다
+      badLog: |
+        7: (7b) *(u64 *)(r1 +32) = r3
+        invalid bpf_context access off=32 size=8
+      options:
+      - text: (volatile u64 *)로 캐스팅해서 쓴다
+        feedback: 캐스팅해도 대상은 같은 ctx 메모리예요. tracepoint 컨텍스트는 읽기 전용이라 쓰기 자체가 허용되지 않아요.
+      - text: 값을 지역 변수로 복사한 뒤 지역 변수를 가공한다
+        correct: true
+        feedback: 맞아요. ctx는 읽기만 하고, 가공은 스택의 지역 변수에서 해요. 시스템 콜 인자를 바꾸는 건 tracing 프로그램이 할 수 있는 일이 아니에요.
+      - text: args[2] 대신 args[1]에 쓴다
+        feedback: 오프셋만 바뀔 뿐 ctx에 쓰는 건 같아요.
+    - id: kernel-ptr
+      title: 커널 포인터를 그냥 따라갔다
+      code: |
+        struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+        ppid = t->real_parent->tgid;
+      hot: 2
+      fixed: |
+        struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+        ppid = BPF_CORE_READ(t, real_parent, tgid);
+      badLog: |
+        2: (85) call bpf_get_current_task#35          ; R0_w=scalar()
+        3: (79) r1 = *(u64 *)(r0 +2720)
+        R0 invalid mem access 'scalar'
+      options:
+      - text: t에 NULL 검사를 추가한다
+        feedback: 문제는 NULL이 아니라 타입이에요. bpf_get_current_task()는 u64(스칼라)를 돌려줘서 verifier는 이걸 포인터로 보지 않아요('scalar').
+      - text: BPF_CORE_READ(t, real_parent, tgid)로 읽는다
+        correct: true
+        feedback: 맞아요. bpf_probe_read_kernel + CO-RE 재배치로 안전하게 읽어요. 5.11+라면 bpf_get_current_task_btf()가 BTF 포인터를 돌려줘서 직접 역참조도 돼요.
+      - text: (void *)로 한 번 더 캐스팅한다
+        feedback: C 캐스팅은 verifier가 보는 레지스터 타입을 바꾸지 못해요. 여전히 scalar예요.
+  sources:
+  - path: chapters/05-verifier/code/cases/01-null-check.bpf.c
+  - path: chapters/05-verifier/code/cases/02-bounds.bpf.c
+  - path: chapters/05-verifier/code/cases/04-unreleased-ref.bpf.c
+  - path: chapters/05-verifier/code/cases/06-ctx-write.bpf.c
+  - path: chapters/05-verifier/code/cases/07-kernel-ptr.bpf.c
+  - path: chapters/05-verifier/README.md
+  - path: chapters/01-big-picture/README.md
+questions:
+- id: read-log
+  kind: choice
+  prompt: verifier 거부 로그가 수십 줄 나왔어요. 어디부터 읽어야 할까요?
+  options:
+  - text: 맨 위 첫 줄부터 순서대로
+    feedback: 위쪽은 대부분 통과한 명령어들의 상태 기록이에요. 원인은 맨 아래에 있어요.
+  - text: 맨 아래 이유 줄, 그리고 바로 위의 명령어 번호
+    correct: true
+    feedback: 맞아요. 마지막 두 줄이 "어느 명령어에서 + 무엇이 문제인지"예요. 그 다음 그 레지스터가 어디서 그 상태가 됐는지 위로 거슬러 올라가요.
+  - text: processed N insns 통계 줄
+    feedback: 통계 줄은 검사한 명령어 수예요. 원인은 그 위의 이유 줄에 있어요.
+  sources:
+  - path: chapters/05-verifier/README.md
+- id: too-large
+  kind: choice
+  prompt: 명령어가 30줄도 안 되는 짧은 프로그램인데 이렇게 거부됐어요. 왜일까요?
+  log: |
+    BPF program is too large. Processed 1000001 insn
+  options:
+  - text: 100만은 프로그램 길이가 아니라 verifier가 경로를 펼쳐 시뮬레이션한 명령어 수라서
+    correct: true
+    feedback: 맞아요. 상한을 증명할 수 없는 루프(n = 사용자 입력)는 끝없이 펼쳐져 한도를 넘어요. 상한을 정하거나 bpf_loop(5.17+)를 써요.
+  - text: clang이 코드를 100만 줄로 부풀려서
+    feedback: 오브젝트 크기는 작아요. 한도는 verifier가 시뮬레이션한 명령어 수 기준이에요.
+  - text: 비특권 사용자로 로드해서 4096 한도에 걸려서
+    feedback: 메시지의 1000001은 특권 프로그램 한도 100만을 넘었다는 뜻이에요.
+  sources:
+  - path: chapters/05-verifier/README.md
+- id: stack-512
+  kind: choice
+  prompt: char path[600]을 지역 변수로 선언했어요. 무슨 일이 생기고, 어떻게 고칠까요?
+  options:
+  - text: verifier가 실행 중에 잘라 낸다. 고칠 필요 없다
+    feedback: BPF 스택은 512바이트(호출 깊이 합산)가 한도라 그 전에 막혀요.
+  - text: 스택 512바이트 한도를 넘어 clang이 먼저 거부한다. per-CPU array를 작업 공간으로 쓴다
+    correct: true
+    feedback: 맞아요. 큰 버퍼는 per-CPU array map 한 칸을 작업 공간으로 빌려 써요.
+  - text: verifier가 infinite loop detected로 거부한다
+    feedback: 루프와는 상관없어요. 스택 크기 한도 문제예요.
+  sources:
+  - path: chapters/05-verifier/README.md
+- id: uninit-stack
+  kind: choice
+  prompt: 패딩이 있는 구조체를 일부만 채워 ring buffer로 보냈는데 이 커널(6.17)에선 통과했어요. 그래도 = {}로 초기화해야 할까요?
+  options:
+  - text: 통과했으니 필요 없다
+    feedback: 6.2 이하 커널에서는 거부되던 코드예요. 내 커널에서 통과했다고 어디서나 통과하는 건 아니에요.
+  - text: 초기화한다. 오래된 커널에서 거부될 수 있고, 커널 스택 쓰레기 값이 사용자 공간으로 샌다
+    correct: true
+    feedback: 맞아요. 6.3부터 특권 프로그램의 초기화 안 된 스택 읽기를 허용하지만, 패딩에 남은 커널 스택 내용이 그대로 새어 나가요.
+  - text: 초기화하면 오히려 verifier가 거부한다
+    feedback: = {}는 어느 커널에서나 안전한 방법이에요.
+  sources:
+  - path: chapters/05-verifier/README.md
+run:
+  cmd: make -C chapters/05-verifier/code build run
+  expect: |
+    R0 invalid mem access 'map_value_or_null'
+    good: 통과 — processed 15 insns (limit 1000000) …
+  sources:
+  - path: chapters/05-verifier/README.md
+

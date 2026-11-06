@@ -1,0 +1,83 @@
+id: '08'
+slug: 08-rust-aya
+title: 'Rust: Aya 맛보기'
+summary: 07장 execsnoop을 Aya로 옮겨 봐요. 흐름은 같지만 CO-RE 부재와 늘어나는 명령어 수를 조심해요.
+questions:
+  - id: no-ppid
+    kind: choice
+    prompt: Aya 버전 execsnoop에는 07장 Go 버전에 있던 PPID 열이 없어요. 왜 뺐을까요?
+    log: |
+      PID      UID    COMM             FILENAME
+      214      65534  sh               /bin/ls
+    options:
+      - text: Aya 로더가 CO-RE 재배치를 못 해서
+        feedback: aya-obj에는 CO-RE 재배치 코드가 있어요. C로 컴파일한 오브젝트를 로드하면 재배치가 일어나요.
+      - text: Rust로 쓴 BPF 코드에는 커널 구조체 필드 접근을 재배치 대상으로 기록하는 수단이 아직 없어서
+        correct: true
+        feedback: 맞아요. aya-tool 바인딩은 생성한 머신의 커널 오프셋에 고정돼요. 그래서 task->real_parent->tgid를 읽는 PPID를 뺐어요.
+      - text: VM 안에서는 PPID를 얻을 수 없어서
+        feedback: VM과는 상관없어요. 커널 구조체를 이식 가능하게 읽을 수단이 Rust BPF 코드에 없는 게 이유예요.
+    sources:
+      - path: chapters/08-rust-aya/README.md
+  - id: insn-bloat
+    kind: choice
+    prompt: 안전한 래퍼를 쓴 첫 버전은 tracepoint 함수가 180칸, 원시 helper·포인터 버전은 74칸이었어요. 직접 원인은?
+    options:
+      - text: Option/Result는 BPF에서 항상 비싸서
+        feedback: README는 그렇게 말하지 않아요. Option/Result 자체가 늘 비싸다는 뜻은 아니에요.
+      - text: 16바이트 배열을 값으로 돌려받아 복사해서
+        correct: true
+        feedback: 맞아요. 스택에 두고 한 바이트씩 옮기는 코드와 memset 호출이 생겼어요. Aya 코드는 llvm-objdump -d로 결과를 확인하는 습관을 들여요.
+      - text: Rust 컴파일러가 BPF 최적화를 지원하지 않아서
+        feedback: 같은 툴체인에서 원시 helper 버전은 C(77칸)보다도 작은 74칸이 됐어요. 원인은 코드 작성 방식이에요.
+    sources:
+      - path: chapters/08-rust-aya/README.md
+  - id: uninit-ref
+    kind: choice
+    prompt: reserve로 받은 초기화 안 된 entry의 필드에 &mut 참조를 만들어 helper에 넘겼어요. 실행은 잘 됐는데 문제일까요?
+    options:
+      - text: 문제다. Rust에서는 그 자체로 정의되지 않은 동작(UB)이고, verifier는 이걸 잡지 못한다
+        correct: true
+        feedback: 맞아요. verifier는 BPF 메모리 안전만 봐요. &raw mut로 원시 포인터만 얻어 쓰는 방식으로 고쳐요.
+      - text: verifier를 통과했으니 안전하다
+        feedback: verifier는 Rust 언어 규칙 위반을 검사하지 않아요. 실행이 잘 돼 보여도 UB예요.
+      - text: 컴파일러가 이미 오류로 막았을 것이다
+        feedback: 컴파일되고 실행도 정상이었어요. 코드 리뷰에서 UB로 지적받아 고친 사례예요.
+    sources:
+      - path: chapters/08-rust-aya/README.md
+  - id: read-volatile
+    kind: choice
+    prompt: FILTER_UID를 read_volatile로 읽지 않고 그냥 if FILTER_UID != u32::MAX로 쓰면 어떤 위험이 있을까요?
+    code: |
+      static FILTER_UID: u32 = u32::MAX;
+      let filter = unsafe { core::ptr::read_volatile(&FILTER_UID) };
+    options:
+      - text: 로더가 FILTER_UID 이름을 찾지 못한다
+        feedback: 이름은 no_mangle이 남겨 줘요. read_volatile은 다른 문제를 막아요.
+      - text: 런타임에 값이 계속 바뀌어 필터가 흔들린다
+        feedback: 값은 로드 전에 한 번 정해져요. 문제는 컴파일 단계에서 생겨요.
+      - text: 컴파일러가 "항상 u32::MAX"라고 상수 접기를 해서 비교문을 지워 버릴 수 있다
+        correct: true
+        feedback: 맞아요. 그러면 로더가 로드 전에 .rodata 값을 바꿔도 필터가 동작하지 않아요. C의 const volatile과 같은 이유예요.
+    sources:
+      - path: chapters/08-rust-aya/README.md
+  - id: map-name
+    kind: choice
+    prompt: '#[map] 이름과 사용자 공간의 take_map("…") 이름을 다르게 적었어요. 언제 드러날까요?'
+    options:
+      - text: cargo build에서 컴파일 오류로
+        feedback: 컴파일 때는 잡히지 않아요. bpf2go처럼 이름 붙은 필드를 생성해 주지 않거든요.
+      - text: 실행 중에 None이 돼서
+        correct: true
+        feedback: 맞아요. 이름 문자열로 찾기 때문에 실행해야 알 수 있어요.
+      - text: verifier가 로드를 거부해서
+        feedback: verifier는 사용자 공간의 map 이름 조회와 관계없어요.
+    sources:
+      - path: chapters/08-rust-aya/README.md
+run:
+  cmd: make -C chapters/08-rust-aya/code build run
+  expect: |
+    === Aya execsnoop: 4초 동안 UID 65534(nobody)가 실행하는 프로그램 추적
+    보낸 이벤트 4개, 유실 0개
+  sources:
+    - path: chapters/08-rust-aya/README.md

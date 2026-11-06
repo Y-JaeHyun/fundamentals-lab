@@ -1,0 +1,96 @@
+id: '09'
+slug: 09-packet-path
+title: 커널 패킷 경로
+summary: 수신 패킷은 XDP → TC → IP → netfilter → UDP → 소켓 순서로 올라가요. 앞에서 버릴수록 뒤의 비용을 아껴요.
+sim:
+  kind: packet-timeline
+  data:
+    scenarios:
+    - id: none
+      label: 버리지 않음
+      row: 1           0      4.9         2.9      1.6      5.3      1.2      3.5    받음
+      received: '앱이 받은 패킷: 10/10'
+    - id: xdp
+      label: XDP에서 버림
+      row: 1           0        -        -        -        -        -        -     -
+      received: '앱이 받은 패킷: 0/10'
+    - id: tc
+      label: TC ingress에서 버림
+      row: 1           0      5.5           -        -        -        -        -     -
+      received: '앱이 받은 패킷: 0/10'
+    - id: nf
+      label: netfilter LOCAL_IN에서 버림
+      row: 1           0      3.9         1.7      1.4      6.1        -        -     -
+      received: '앱이 받은 패킷: 0/10'
+    - id: sockfilter
+      label: 소켓 필터에서 버림
+      row: 1           0      6.4         3.6      1.8      5.8      1.6      3.9     -
+      received: '앱이 받은 패킷: 0/10'
+  sources:
+  - path: chapters/09-packet-path/README.md
+questions:
+- id: order
+  kind: order
+  prompt: 수신 패킷이 지나가는 순서대로 맞춰 보세요.
+  items:
+  - XDP
+  - TC ingress
+  - IP 계층 진입
+  - netfilter PRE_ROUTING
+  - 라우팅
+  - netfilter LOCAL_IN
+  - UDP/TCP
+  - 소켓
+  feedback: 맞아요. 각 지점마다 BPF를 붙일 수 있고, 앞에서 버릴수록 sk_buff 할당·라우팅·소켓 조회 비용을 아껴요.
+  sources:
+  - path: chapters/09-packet-path/README.md
+- id: sockfilter-cost
+  kind: choice
+  prompt: 소켓 필터에서 버려도 앱이 못 받는 건 똑같아요. 그럼 소켓 필터에서 버리는 건 언제 쓸까요?
+  options:
+  - text: 비용이 가장 싸서 항상 쓴다
+    feedback: 반대예요. 라우팅·UDP 처리·소켓 조회까지 다 한 뒤 마지막에 버려서 비용은 가장 커요.
+  - text: 비용은 가장 크지만 그 소켓 하나에만 적용하고 싶을 때
+    correct: true
+    feedback: 맞아요. 결과는 같아도 비용은 가장 커요. 대신 영향 범위가 소켓 하나로 좁아요.
+  - text: XDP를 지원하지 않는 커널에서만
+    feedback: 소켓 필터는 비용과 적용 범위 때문에 고르는 자리예요.
+  sources:
+  - path: chapters/09-packet-path/README.md
+- id: ip-entry
+  kind: choice
+  prompt: XDP를 붙였을 때와 뺐을 때 IP 계층 진입 함수 호출 수가 이렇게 달랐어요. 무슨 차이일까요?
+  log: |
+    veth09b에서 IP 계층 진입: ip_rcv 0회, ip_list_rcv 10회(묶음 단위 호출)
+    veth09b에서 IP 계층 진입: ip_rcv 10회, ip_list_rcv 0회(묶음 단위 호출)
+  options:
+  - text: XDP가 붙어 있으면 묶음 단위 ip_list_rcv 경로로, 없으면 ip_rcv로 하나씩 들어갔다
+    correct: true
+    feedback: 맞아요. 첫 줄이 XDP 있음, 둘째 줄이 XDP 없음이에요. 1.3에서 소스로 확인한 두 경로와 맞아요.
+  - text: XDP가 있으면 IP 계층을 아예 건너뛴다
+    feedback: 패킷은 10개 모두 IP 계층에 들어갔어요(호출 함수만 달라요).
+  - text: 측정 오차일 뿐 의미 없다
+    feedback: 10회 vs 0회로 깔끔하게 갈렸어요. 서로 다른 코드 경로예요.
+  sources:
+  - path: chapters/09-packet-path/README.md
+- id: numbers
+  kind: choice
+  prompt: XDP에서 소켓 필터까지 중앙값 합계가 약 22µs였어요. 이 숫자를 어떻게 써야 할까요?
+  options:
+  - text: 커널 네트워크 처리 비용의 측정값으로 인용한다
+    feedback: 각 hook에서 돈 실험 프로그램 자신의 비용(map 조회·갱신, 바이트 복사)이 들어 있어서 그렇게 쓰면 안 돼요.
+  - text: 이 장비·이 조건에서 hook 사이 순서와 대략의 규모를 보는 용도로만
+    correct: true
+    feedback: 맞아요. 측정 도구 자체가 결과에 섞여 있다는 걸 늘 의식해야 해요.
+  - text: XDP 프로그램 하나의 비용이다
+    feedback: 합계는 일곱 지점을 지난 전체 구간이에요.
+  sources:
+  - path: chapters/09-packet-path/README.md
+run:
+  cmd: make -C chapters/09-packet-path/code build run
+  expect: |
+    앱이 받은 패킷: 10/10
+    veth09b에서 IP 계층 진입: ip_rcv 0회, ip_list_rcv 10회(묶음 단위 호출)
+  sources:
+  - path: chapters/09-packet-path/README.md
+

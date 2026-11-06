@@ -1,0 +1,100 @@
+id: '04'
+slug: 04-maps
+title: Map과 데이터 전달
+summary: map은 상태 저장소이자 사용자 공간과의 통로예요. 데이터를 넘길 땐 유실이 반드시 생긴다고 보고 세요.
+sim:
+  kind: buffer-loss
+  data:
+    anchors:
+    - buffer: default
+      delayUs: 0
+      rows: |
+        집계(map)              500000          -          0      967.4      323.3          1ms
+        ringbuf reserve      500000     500000          0     1797.3     1149.2        588ms
+        ringbuf output       500000     500000          0     1833.8     1239.2        579ms
+        perf buffer          500000     500000          0     3152.4     2572.1       1.347s
+    - buffer: small
+      delayUs: 0
+      rows: |
+        집계(map)              500000          -          0      863.0      261.4          1ms
+        ringbuf reserve      500000     499296        704     1871.2     1185.0        602ms
+        ringbuf output       500000     499707        293     1794.8     1203.8        588ms
+        perf buffer          500000     492397       7603     3183.0     2555.1       1.338s
+    - buffer: small
+      delayUs: 2
+      rows: |
+        집계(map)              500000          -          0      897.6      230.5          1ms
+        ringbuf reserve      500000     214155     285845      957.6      360.2        483ms
+        ringbuf output       500000     235237     264763     1075.4      458.0        542ms
+        perf buffer          500000     498232       1768     2846.8     2243.5       1.422s
+  sources:
+  - path: chapters/04-maps/README.md
+questions:
+- id: hash-full
+  kind: choice
+  prompt: max_entries=4인 hash map에 다섯 번째 키를 넣었어요. 무슨 일이 생길까요?
+  log: |
+    Put(5) → 에러: update: key too big for map: argument list too long
+  options:
+  - text: 가장 오래된 키가 밀려나고 들어간다
+    feedback: 그건 LRU_HASH의 동작이에요. 일반 hash는 max_entries가 상한이에요.
+  - text: E2BIG으로 실패한다. BPF 안에서도 반환값을 안 보면 조용히 기록을 잃는다
+    correct: true
+    feedback: 맞아요. bpf_map_update_elem의 반환값을 꼭 확인하세요.
+  - text: map이 자동으로 늘어난다
+    feedback: BPF map 크기는 만들 때 고정돼요.
+  sources:
+  - path: chapters/04-maps/README.md
+- id: lru-lookup
+  kind: choice
+  prompt: LRU_HASH(max 4)에 1~4를 넣고, 사용자 공간에서 1을 조회한 뒤 5, 6을 넣었어요. 남은 키가 이렇게 나온 이유는?
+  log: |
+    남은 키: 6 5 4 3
+  options:
+  - text: 사용자 공간의 시스템 콜 조회는 "사용"으로 치지 않아서 1도 축출됐다
+    correct: true
+    feedback: 맞아요. 모니터링 도구가 map을 훑기만 해도 축출 순서가 흐트러지지 않게 하려는 설계예요. BPF 프로그램 안의 lookup은 사용으로 쳐요.
+  - text: LRU가 고장 났다
+    feedback: 의도된 동작이에요.
+  - text: 1을 조회하면 그 키가 지워진다
+    feedback: 조회는 지우지 않아요. 축출 순서에 반영되지 않았을 뿐이에요.
+  sources:
+  - path: chapters/04-maps/README.md
+- id: array-delete
+  kind: choice
+  prompt: ARRAY map에서 Delete(2)를 했더니 invalid argument가 나왔어요. 왜일까요?
+  log: |
+    Delete(2) → 에러: delete: invalid argument
+  options:
+  - text: 2번 칸이 비어 있어서
+    feedback: array는 만들 때 모든 칸이 0으로 미리 할당돼요. 비어 있는 칸이 없어요.
+  - text: array는 모든 칸이 미리 할당돼 있어 삭제가 불가능해서(EINVAL)
+    correct: true
+    feedback: 맞아요. 그래서 범위 안이라면 조회는 항상 성공해요(아무것도 안 넣어도 값=0).
+  - text: 권한이 없어서
+    feedback: 권한 문제라면 EPERM이에요.
+  sources:
+  - path: chapters/04-maps/README.md
+- id: lpm
+  kind: choice
+  prompt: LPM trie에 0.0.0.0/0, 10.0.0.0/8, 10.1.0.0/16, 10.1.2.0/24가 있어요. 10.1.9.9는 어디에 걸릴까요?
+  options:
+  - text: 10.1.2.0/24
+    feedback: 10.1.9.9는 10.1.2.x가 아니에요.
+  - text: 10.1.0.0/16
+    correct: true
+    feedback: 맞아요. 일치하는 것 중 가장 긴 prefix를 골라요.
+    log: |
+      10.1.9.9     → 10.1.0.0/16
+  - text: 0.0.0.0/0
+    feedback: 더 긴 일치(/16)가 있으면 그걸 골라요.
+  sources:
+  - path: chapters/04-maps/README.md
+run:
+  cmd: make -C chapters/04-maps/code build run
+  expect: |
+    남은 키: 6 5 4 3
+    10.1.2.3     → 10.1.2.0/24
+  sources:
+  - path: chapters/04-maps/README.md
+

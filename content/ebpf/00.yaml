@@ -1,0 +1,69 @@
+id: '00'
+slug: 00-setup
+title: 실습 환경
+summary: 5.8 이상 커널과 BTF, clang·bpftool·bpftrace면 충분해요. 빌드는 일반 사용자, 실행만 root.
+questions:
+  - id: lsm-warn
+    kind: choice
+    prompt: make check에서 이런 경고가 나왔어요. 이 상태로 실습할 수 없는 장은 어디일까요?
+    log: |
+      [WARN] 활성 LSM에 bpf 없음(lockdown,capability,landlock,yama,apparmor,ima,evm) — 12장(LSM-BPF) 실습 시 부팅 인자 변경 필요
+    options:
+      - text: 12장 LSM-BPF만 영향을 받는다
+        correct: true
+        feedback: 맞아요. CONFIG_BPF_LSM=y로 빌드된 커널이어도 부팅 인자 lsm= 목록에 bpf가 있어야 LSM-BPF가 켜져요. 다른 장의 tracing·네트워크 예제와는 상관없어요.
+      - text: BTF가 없다는 뜻이라 CO-RE를 쓰는 06장부터 전부 막힌다
+        feedback: BTF는 /sys/kernel/btf/vmlinux로 따로 확인해요. 이 경고는 활성 LSM 목록 이야기예요.
+      - text: 모든 BPF 프로그램 로드가 막힌다
+        feedback: 로드 권한은 unprivileged_bpf_disabled와 root/CAP_BPF가 정해요. LSM 목록에 bpf가 없으면 LSM hook에 붙이는 프로그램만 못 써요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: sudo-build
+    kind: choice
+    prompt: 권한 에러가 귀찮아서 sudo make build로 빌드했어요. 무엇이 문제일까요?
+    options:
+      - text: bin/, *.o, Go 캐시가 root 소유가 돼서 이후 일반 사용자 빌드가 꼬인다
+        correct: true
+        feedback: 맞아요. 그래서 이 저장소는 빌드는 일반 사용자로, run 타깃만 내부에서 sudo로 미리 빌드된 결과물을 실행해요.
+      - text: root로 컴파일하면 verifier가 더 엄격해진다
+        feedback: verifier는 로드할 때 커널이 돌려요. 누가 컴파일했는지는 상관없어요.
+      - text: 문제없다. 오히려 권장 방법이다
+        feedback: 이 저장소는 일부러 빌드와 실행 권한을 나눠요. root 빌드는 산출물 소유권을 망가뜨려요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: lockdown
+    kind: choice
+    prompt: cat /sys/kernel/security/lockdown 결과가 confidentiality였어요. 어떤 일이 생길까요?
+    options:
+      - text: 아무 영향 없다
+        feedback: confidentiality 모드는 커널 메모리 읽기를 막아요. 추적 예제에 직접 영향을 줘요.
+      - text: bpf_probe_read_* 같은 커널 메모리 읽기가 막혀 추적 예제 대부분이 실패한다
+        correct: true
+        feedback: 맞아요. Secure Boot가 켜진 일부 배포판이 이 모드로 부팅돼요. lockdown=none이나 integrity인지 먼저 확인해요.
+      - text: XDP 같은 네트워크 hook만 막힌다
+        feedback: lockdown confidentiality가 막는 건 커널 메모리를 읽는 helper 쪽이에요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: unpriv
+    kind: choice
+    prompt: 런타임 설정에서 unprivileged_bpf_disabled=2가 보였어요. 무슨 뜻일까요?
+    log: |
+      [OK]   unprivileged_bpf_disabled=2: BPF 로드에 root(또는 CAP_BPF) 필요 — 정상
+    options:
+      - text: 비특권 BPF가 금지돼 있고, 관리자도 런타임에 다시 열 수 없다. 최근 배포판의 정상 기본값이다
+        correct: true
+        feedback: 맞아요. 그래서 root로 실행하거나, 운영에서는 CAP_BPF + CAP_PERFMON(tracing) 또는 CAP_BPF + CAP_NET_ADMIN(네트워크)만 줘요.
+      - text: BPF 기능이 커널에서 꺼져 있어 실습이 불가능하다
+        feedback: OK로 표시된 정상 상태예요. 일반 사용자의 로드만 막혀 있어요.
+      - text: 일반 사용자도 BPF를 로드할 수 있다
+        feedback: 반대예요. 2는 비특권 BPF 금지예요.
+    sources:
+      - path: chapters/00-setup/README.md
+run:
+  cmd: make check
+  expect: |
+    [OK]   5.8 이상 (ring buffer, CAP_BPF 사용 가능)
+    [OK]   /sys/kernel/btf/vmlinux (6917319 bytes) — CO-RE 사용 가능
+    결과: 필수 항목 통과
+  sources:
+    - path: chapters/00-setup/README.md
