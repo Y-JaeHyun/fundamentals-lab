@@ -1,5 +1,6 @@
 import type { Chapter, Course, SimKind } from '../content/schema';
 import { orderSim } from './order/view';
+import { verifierSim } from './verifier/view';
 
 export interface SimContext {
   course: Course;
@@ -16,6 +17,7 @@ export interface SimView {
 
 const views: Partial<Record<SimKind, SimView>> = {
   order: orderSim,
+  verifier: verifierSim,
 };
 
 export function getSim(kind: SimKind): SimView | undefined {

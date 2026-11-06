@@ -129,3 +129,18 @@ ol.order .moves button { padding: 4px 10px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* verifier 퍼즐 */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; }
+.grid2 > * { min-width: 0; }
+pre.code.lines { padding-inline: 0; }
+pre.code.lines .ln { display: block; padding-inline: 14px; white-space: pre; }
+pre.code.lines .ln.hot { background: rgba(255, 110, 90, .2); box-shadow: inset 3px 0 0 #ff6e5a; }
+pre.code.lines .ln.fix { background: rgba(76, 198, 140, .2); box-shadow: inset 3px 0 0 #4cc68c; }
+.case-tabs button.case { padding: 6px 12px; font-size: .85rem; }
+.case-tabs button.current { border-color: var(--accent); background: var(--accent-soft); }
+.stages { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--f-mono); font-size: .76rem; }
+.stages span { padding: 3px 8px; border-radius: 4px; background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+.stages span.on { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.stages span.fail { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+.kernel-says.ok { color: var(--good); }
