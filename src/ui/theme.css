@@ -181,3 +181,15 @@ button[data-buffer][aria-pressed="true"] { border-color: var(--accent); backgrou
 .bar .bar-track { height: 14px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); overflow: hidden; }
 .bar .fill { display: block; height: 100%; background: var(--bad); transition: width .25s; }
 .bar .num { font-family: var(--f-mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
+
+/* ROS2 토픽 배선 */
+.chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+.node { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--panel2); min-width: 0; }
+.node .nm { font-family: var(--f-mono); font-weight: 600; }
+.node .io { font-size: .72rem; font-weight: 700; letter-spacing: .05em; color: var(--muted); }
+.node code { font-family: var(--f-mono); font-size: .74rem; overflow-wrap: anywhere; }
+.node select { font: inherit; font-family: var(--f-mono); font-size: .78rem; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
+.edge { border-radius: 6px; padding: 6px 8px; font-size: .8rem; display: flex; flex-direction: column; gap: 4px; }
+.edge.ok { background: var(--good-soft); color: var(--good); }
+.edge.err { background: var(--bad-soft); color: var(--bad); }
+canvas.world { width: 100%; max-width: 100%; height: auto; aspect-ratio: 3 / 1; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); display: block; }
