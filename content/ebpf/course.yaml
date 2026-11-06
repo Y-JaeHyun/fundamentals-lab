@@ -1,0 +1,6 @@
+id: ebpf
+title: eBPF 기초 체력
+summary: 리눅스 커널 안에서 안전하게 코드를 돌리는 eBPF를, 거부당하고 패킷을 놓쳐 보면서 익혀요.
+repo: https://github.com/Y-JaeHyun/ebpf-fundamentals-kr
+sha: db1dab9094f735f40ea47a079e4d7c0a516b8455
+chapters: ['00']
