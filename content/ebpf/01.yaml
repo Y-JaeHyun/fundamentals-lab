@@ -1,0 +1,107 @@
+id: '01'
+slug: 01-big-picture
+title: eBPF 큰 그림
+summary: C 코드가 바이트코드가 되고, verifier와 JIT를 거쳐 hook에 붙고, map으로 사용자 공간과 주고받는 흐름을 한 번에 봐요.
+sim:
+  kind: order
+  data:
+    prompt: hello.bpf.c가 커널에서 이벤트마다 실행되기까지, 단계를 순서대로 놓아 보세요.
+    items:
+      - hello.bpf.c 작성 (SEC로 hook 지정)
+      - clang -target bpf로 컴파일
+      - hello.bpf.o 생성 (바이트코드 + map 정의 + BTF)
+      - 로더가 map을 만들고 재배치한 뒤 bpf() 시스템 콜로 프로그램 전달
+      - verifier가 모든 실행 경로를 따라가며 안전성 검사
+      - JIT가 바이트코드를 CPU 기계어로 번역
+      - hook에 attach (BPF link)
+      - 이벤트마다 실행되고, map을 통해 사용자 공간과 데이터 교환
+  sources:
+    - path: chapters/01-big-picture/README.md
+questions:
+  - id: gpl-license
+    kind: choice
+    prompt: hello.bpf.c의 라이선스 문자열만 "Proprietary"로 바꿔 로드했더니 이렇게 거부됐어요. 왜일까요?
+    log: |
+      == 10) 일부러 실패시키기 ② GPL이 아닌 라이선스 (bad-license.bpf.o)
+      cannot call GPL-restricted function from non-GPL compatible program
+    options:
+      - text: 라이선스 섹션은 장식일 뿐이고, 실제 원인은 컴파일 오류다
+        feedback: 컴파일은 정상이에요. 로드할 때 커널이 license 섹션을 보고 GPL 전용 helper 호출을 막은 거예요.
+      - text: bpf_printk(내부적으로 bpf_trace_printk)가 GPL 전용 helper라서, GPL 호환이 아닌 프로그램은 부를 수 없다
+        correct: true
+        feedback: 맞아요. GPL 호환 라이선스가 아니면 bpf_printk, bpf_probe_read_* 같은 GPL 전용 helper를 쓸 수 없어요.
+      - text: Proprietary 라이선스 프로그램은 어떤 helper도 부를 수 없다
+        feedback: 막히는 건 GPL 전용 helper예요. 모든 helper가 막히는 건 아니에요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: null-check
+    kind: choice
+    prompt: if (cnt)를 if (1)로 바꿔 NULL 검사를 없앴더니 verifier가 이렇게 거부했어요. 무슨 뜻일까요?
+    log: |
+      8: (db) lock *(u64 *)(r0 +0) += r1
+      R0 invalid mem access 'map_value_or_null'
+    options:
+      - text: map에 키가 없어서 런타임에 커널이 프로그램을 멈췄다
+        feedback: 이건 실행 중이 아니라 로드할 때 나온 verifier 거부예요. 프로그램은 커널에 올라가지도 못했어요.
+      - text: 원자 연산(lock)은 BPF에서 쓸 수 없다
+        feedback: 원래 hello.bpf.c도 같은 원자 덧셈을 쓰고 잘 로드돼요. 문제는 r0가 NULL일 수 있다는 점이에요.
+      - text: bpf_map_lookup_elem의 반환값 r0는 "map 값 또는 NULL"이라, 검사 없이 역참조하면 그 자리에서 거부된다
+        correct: true
+        feedback: 맞아요. verifier는 r0를 map_value_or_null 타입으로 추적해요. 항상 if (!val) return 0; 처럼 NULL을 먼저 걸러요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: two-maps
+    kind: choice
+    prompt: 코드에서 정의한 map은 exec_count 하나뿐인데, 로드된 프로그램 정보에 map_ids가 두 개예요. 나머지 하나는 뭘까요?
+    log: |
+      647818: tracepoint  name count_execve  tag b58ff3a7e0136a30  gpl
+      xlated 280B  jited 169B  memlock 4096B  map_ids 1932,1934
+    options:
+      - text: bpf_printk 형식 문자열이 든 .rodata가 내부 map으로 만들어진 것이다
+        correct: true
+        feedback: 맞아요. 전역 변수·상수도 map으로 구현돼요. 이름이 ….rodata로 끝나는 내부 map이에요.
+      - text: per-CPU 복사본이 자동으로 하나 더 생긴 것이다
+        feedback: exec_count는 일반 HASH map이에요. 두 번째 map은 .rodata 섹션에서 왔어요.
+      - text: verifier가 검증용으로 임시 map을 만든 것이다
+        feedback: 두 번째 map은 검증용이 아니에요. ELF의 .rodata 섹션(bpf_printk 형식 문자열)이 내부 map으로 만들어진 거예요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: system-wide
+    kind: choice
+    prompt: nobody(UID 65534)로 명령을 세 번 실행했는데, map에는 다른 UID 값도 잔뜩 있어요. 왜일까요?
+    log: |
+      "key": 1000,
+      "value": 778
+      "key": 65534,
+      "value": 3
+    options:
+      - text: UID를 잘못 읽는 버그다
+        feedback: nobody의 3회는 정확히 잡혔어요. 나머지는 같은 시간에 다른 사용자가 실행한 execve예요.
+      - text: map이 이전 실행 값을 이어서 갖고 있었다
+        feedback: map은 프로그램과 함께 새로 만들어졌어요. 원인은 tracepoint가 붙는 범위예요.
+      - text: tracepoint는 특정 프로세스가 아니라 시스템 전체에 붙기 때문이다
+        correct: true
+        feedback: 맞아요. 같은 3초 동안 시스템의 다른 사용자가 한 execve도 모두 세어졌어요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: debug-xlated
+    kind: choice
+    prompt: 로드가 끝난 프로그램을 디버깅할 때 보는 덤프는 어느 쪽일까요?
+    options:
+      - text: llvm-objdump -d로 본 컴파일러 출력
+        feedback: 컴파일러 출력은 map 자리가 0으로 비어 있고 helper도 번호로만 나와요. 커널에서 실제로 도는 것과 달라요.
+      - text: bpftool의 xlated 덤프
+        correct: true
+        feedback: 맞아요. verifier가 map·helper 주소를 채우고 일부 명령어를 바꾼 뒤의 모습이에요. BTF 덕분에 C 소스 줄도 함께 보여요.
+      - text: C 소스만 보면 충분하다
+        feedback: verifier가 바이트코드를 고쳐 쓰기 때문에, 커널 안의 실제 명령어는 xlated로 확인해요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+run:
+  cmd: make -C chapters/01-big-picture/code build run
+  expect: |
+    == 1) 로드 + 자동 attach (verifier 통과 시에만 성공)
+    R0 invalid mem access 'map_value_or_null'
+    cannot call GPL-restricted function from non-GPL compatible program
+  sources:
+    - path: chapters/01-big-picture/README.md

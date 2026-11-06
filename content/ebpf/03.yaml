@@ -1,0 +1,82 @@
+id: '03'
+slug: 03-tracing-hooks
+title: 프로그램 타입과 tracing hook
+summary: kprobe·fentry·tracepoint·uprobe를 안정성, 볼 수 있는 정보, 비용으로 골라요. 같은 read()로 비용을 직접 재 봐요.
+questions:
+  - id: fentry-vs-kprobe
+    kind: choice
+    prompt: 같은 vfs_read에 붙였는데 fentry가 kprobe보다 이벤트당 비용이 작아요. 이유는?
+    log: |
+      HOOK           EVENTS      기준 ns    hook ns   +ns/event      +ns/event 범위
+      kprobe         500000      650.8      869.7       243.6    187.4 ~  281.6
+      fentry         500000      639.4      764.6       129.3     90.5 ~  183.4
+    options:
+      - text: fentry는 이벤트를 일부만 받기 때문에
+        feedback: 모든 hook이 정확히 50만 번 불렸어요. 이벤트 수는 같아요.
+      - text: kprobe는 pt_regs를 저장하고 관리 코드를 거치지만, fentry는 BPF trampoline이 프로그램을 거의 직접 호출하기 때문에
+        correct: true
+        feedback: 맞아요. 대신 fentry/fexit는 BTF가 필요해요(5.5+, x86).
+      - text: fentry는 커널 함수가 아니라 tracepoint에 붙기 때문에
+        feedback: fentry도 kprobe처럼 커널 함수에 붙어요. 붙는 방식(BPF trampoline)이 달라요.
+    sources:
+      - path: chapters/03-tracing-hooks/README.md
+  - id: return-value
+    kind: choice
+    prompt: 커널 함수의 반환값이 필요해요. 이 측정 결과를 보면 무엇을 먼저 생각하는 게 좋을까요?
+    log: |
+      kretprobe      500000      604.4     1167.9       572.1    516.4 ~  653.3
+      fexit          500000      597.1      868.8       221.1    209.6 ~  304.3
+    options:
+      - text: kretprobe. 반환값 전용이라 가장 가볍다
+        feedback: kretprobe는 진입에서 반환 주소를 바꿔 치는 작업까지 해서 실제로는 두 번의 비용이에요.
+      - text: fexit. 비용이 kretprobe의 절반 이하이고, 인자와 반환값을 둘 다 본다
+        correct: true
+        feedback: 맞아요. 동시 호출이 많을 때 kretprobe처럼 maxactive가 모자라 반환을 놓치는 제한도 없어요.
+      - text: tracepoint. 모든 함수의 반환값을 준다
+        feedback: tracepoint는 미리 심어 둔 지점에서만 쓸 수 있고, 함수 반환값을 주는 hook이 아니에요.
+    sources:
+      - path: chapters/03-tracing-hooks/README.md
+  - id: uprobe-cost
+    kind: choice
+    prompt: uprobe는 커널 hook보다 열 배쯤 비싸요. 왜일까요?
+    log: |
+      uprobe         500000      609.8     2687.4      2077.6   1997.5 ~ 2161.2
+    options:
+      - text: 사용자 코드에 심은 int3가 트랩을 일으켜 커널로 진입했다 돌아오기 때문에
+        correct: true
+        feedback: 맞아요. 그래서 malloc처럼 호출이 잦은 사용자 함수에 붙이면 대상 프로그램이 눈에 띄게 느려져요.
+      - text: 사용자 공간 프로그램은 JIT가 안 되기 때문에
+        feedback: BPF 프로그램은 hook 종류와 상관없이 커널에서 돌아요. 비용은 트랩으로 커널에 들어갔다 나오는 데서 생겨요.
+      - text: 측정 오차라서 실제로는 비슷하다
+        feedback: 범위 열을 봐도 2µs 근처에서 크게 벗어나지 않아요. 자릿수가 다른 차이예요.
+    sources:
+      - path: chapters/03-tracing-hooks/README.md
+  - id: hook-order
+    kind: order
+    prompt: 커널 동작을 관측할 때 hook을 고르는 기본 순서대로 놓아 보세요.
+    items:
+      - 관련 tracepoint가 있으면 tracepoint
+      - 없으면 BTF가 있을 때 fentry/fexit
+      - 그래도 안 되면 kprobe/kretprobe
+    feedback: tracepoint가 가장 덜 바뀌고, fentry/fexit는 BTF(5.5+)가 필요하며, kprobe는 어디든 붙지만 커널이 바뀌면 깨지기 쉬워요.
+    sources:
+      - path: chapters/03-tracing-hooks/README.md
+  - id: cost-impact
+    kind: choice
+    prompt: 이벤트당 200ns짜리 hook이에요. 이 hook이 초당 100만 번 불리면 어떨까요?
+    options:
+      - text: 200ns는 작으니 영향이 없다
+        feedback: hook 비용만 보면 안 돼요. 이벤트당 비용 × 초당 이벤트 수가 실제 영향이에요.
+      - text: CPU 0.2개 정도를 쓴다
+        correct: true
+        feedback: 맞아요. 200ns × 100만 = 0.2초/초예요. 그래서 hook에서 대상을 최대한 일찍 걸러 내는 게 중요해요.
+      - text: CPU 20개를 쓴다
+        feedback: 계산을 다시 해 봐요. 200ns × 100만 = 0.2초, 즉 CPU 0.2개 분량이에요.
+    sources:
+      - path: chapters/03-tracing-hooks/README.md
+run:
+  cmd: make -C chapters/03-tracing-hooks/code build run
+  expect: |
+    HOOK           EVENTS      기준 ns    hook ns   +ns/event      +ns/event 범위
+  sources:
+    - path: chapters/03-tracing-hooks/README.md

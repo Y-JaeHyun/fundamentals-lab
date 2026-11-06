@@ -1,0 +1,80 @@
+id: '06'
+slug: 06-libbpf-core
+title: libbpf + CO-RE/BTF
+summary: 한 번 빌드한 BPF 오브젝트가 다른 커널에서도 도는 비밀은 로드할 때 오프셋을 고쳐 쓰는 CO-RE예요.
+questions:
+  - id: core-where
+    kind: choice
+    prompt: CO-RE 재배치(필드 오프셋 고쳐 쓰기)는 어디에서 일어날까요?
+    options:
+      - text: 커널 verifier 안에서
+        feedback: 커널은 이미 고쳐진 명령어만 받아요. 재배치는 그 전에 끝나요.
+      - text: clang이 컴파일할 때 대상 커널 오프셋으로
+        feedback: clang은 "어느 필드를 읽는지"를 .BTF.ext에 기록만 해요. 대상 커널은 컴파일 때 알 수 없어요.
+      - text: 로드할 때 사용자 공간 로더(libbpf, cilium/ebpf 등)에서
+        correct: true
+        feedback: 맞아요. 로더가 오브젝트의 BTF와 /sys/kernel/btf/vmlinux를 이름으로 비교해 오프셋을 고친 뒤 커널에 넘겨요.
+    sources:
+      - path: chapters/06-libbpf-core/README.md
+  - id: invalid-insn
+    kind: choice
+    prompt: 옛 이름 state를 읽는 flavor 구조체 쪽 재배치가 이렇게 나왔어요. 이 커널에서 그 명령어는 어떻게 될까요?
+    log: |
+      libbpf: prog 'handle_exit': relo #6: no matching targets found
+      libbpf: prog 'handle_exit': relo #6: substituting insn #80 w/ invalid insn
+    options:
+      - text: 없는 필드라서 조용히 0을 읽는다
+        feedback: 그런 일은 생기지 않아요. libbpf는 그 명령어를 잘못된 명령어로 바꿔 둬요.
+      - text: field_exists가 1이라 실행되지 않는 분기 안에 있으므로 verifier가 죽은 코드로 보고 지운다
+        correct: true
+        feedback: 맞아요. 실행될 수 있는 경로에 있었다면 verifier가 로드를 거부했을 거예요.
+      - text: libbpf가 로드를 즉시 중단한다
+        feedback: 로드는 계속돼요. 이 명령어는 실행되지 않는 분기 안에 있어서 문제가 되지 않았어요.
+    sources:
+      - path: chapters/06-libbpf-core/README.md
+  - id: same-offset
+    kind: choice
+    prompt: 재배치 로그에 imm 3048 -> 3048처럼 값이 그대로예요. 무슨 뜻일까요?
+    log: |
+      libbpf: prog 'handle_exit': relo #0: patched insn #21 (ALU/ALU64) imm 3048 -> 3048
+    options:
+      - text: 빌드한 머신과 실행한 머신이 같아서 오프셋이 그대로다
+        correct: true
+        feedback: 맞아요. 다른 커널에서 실행하면 오른쪽 숫자가 달라져요.
+      - text: CO-RE 재배치가 실패했다
+        feedback: 실패했다면 이렇게 patched로 나오지 않아요. 같은 값으로 고쳐 쓴 거예요.
+      - text: CO-RE가 꺼져 있어서 컴파일 때 값이 박혔다
+        feedback: patched insn 줄 자체가 CO-RE 재배치가 일어났다는 기록이에요.
+    sources:
+      - path: chapters/06-libbpf-core/README.md
+  - id: skel-order
+    kind: order
+    prompt: skeleton으로 로드 전 상수(target_uid)를 넣으려면 어떤 순서로 불러야 할까요?
+    items:
+      - exitsnoop_bpf__open()
+      - skel->rodata->target_uid = uid
+      - exitsnoop_bpf__load()
+      - exitsnoop_bpf__attach()
+    feedback: load 때 .rodata map이 읽기 전용으로 동결돼요. 그래서 상수는 open과 load 사이에서만 넣어요. open_and_load()를 쓰면 이 틈이 없어요.
+    sources:
+      - path: chapters/06-libbpf-core/README.md
+  - id: big-skeleton
+    kind: choice
+    prompt: 만든 skeleton 헤더가 수 MB예요. 무엇을 빠뜨렸을까요?
+    options:
+      - text: -g 없이 컴파일하지 않은 것. -g를 빼면 된다
+        feedback: -g를 빼면 BTF가 생기지 않아 CO-RE를 쓸 수 없어요.
+      - text: llvm-strip -g로 DWARF를 떼지 않은 것
+        correct: true
+        feedback: 맞아요. 이 예제는 941,936바이트에서 34,184바이트로 줄었어요. 로드에 필요한 .BTF와 .BTF.ext는 strip 후에도 남아요.
+      - text: .BTF 섹션을 지우지 않은 것
+        feedback: .BTF는 CO-RE 재배치에 필요해요. 지워야 할 건 DWARF 디버그 정보예요.
+    sources:
+      - path: chapters/06-libbpf-core/README.md
+run:
+  cmd: make -C chapters/06-libbpf-core/code build run
+  expect: |
+    libbpf: sec 'tp_btf/sched_process_exit': found 8 CO-RE relocations
+    PID      PPID     COMM              EXIT  SIG   LIFE(ms) STATE
+  sources:
+    - path: chapters/06-libbpf-core/README.md
