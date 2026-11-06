@@ -2,6 +2,7 @@
 import type { SimKind, SimValidators } from '../content/schema';
 import { hookQuoted, validateHookPicker } from './hook-picker/model';
 import { orderQuoted, validateOrderSim } from './order/model';
+import { timelineQuoted, validateTimeline } from './packet-timeline/model';
 import { validateVerifier, verifierQuoted } from './verifier/model';
 
 interface SimLogic {
@@ -13,6 +14,7 @@ const logic: Partial<Record<SimKind, SimLogic>> = {
   order: { validate: validateOrderSim, quotedLines: orderQuoted },
   verifier: { validate: validateVerifier, quotedLines: verifierQuoted },
   'hook-picker': { validate: validateHookPicker, quotedLines: hookQuoted },
+  'packet-timeline': { validate: validateTimeline, quotedLines: timelineQuoted },
 };
 
 export function simValidators(): SimValidators {

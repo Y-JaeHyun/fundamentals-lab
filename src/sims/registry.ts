@@ -1,6 +1,7 @@
 import type { Chapter, Course, SimKind } from '../content/schema';
 import { hookPickerSim } from './hook-picker/view';
 import { orderSim } from './order/view';
+import { packetTimelineSim } from './packet-timeline/view';
 import { verifierSim } from './verifier/view';
 
 export interface SimContext {
@@ -20,6 +21,7 @@ const views: Partial<Record<SimKind, SimView>> = {
   order: orderSim,
   verifier: verifierSim,
   'hook-picker': hookPickerSim,
+  'packet-timeline': packetTimelineSim,
 };
 
 export function getSim(kind: SimKind): SimView | undefined {

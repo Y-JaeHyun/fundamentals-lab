@@ -156,3 +156,15 @@ button.hook:disabled { opacity: .5; border-style: dashed; border-color: var(--li
 button.hook.right { border-color: var(--good); background: var(--good-soft); opacity: 1; }
 button.hook.wrong { border-color: var(--bad); background: var(--bad-soft); opacity: 1; }
 .pkt { position: absolute; top: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); left: 0; transition: left .7s cubic-bezier(.5, 0, .3, 1); pointer-events: none; }
+
+/* 패킷 타임라인 */
+button.scenario[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.stages-row { display: grid; grid-template-columns: repeat(8, minmax(84px, 1fr)); gap: 6px; min-width: 720px; padding-block: 4px; }
+.stage { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 2px; background: var(--panel2); transition: background .2s, border-color .2s, opacity .2s; }
+.stage b { font-size: .76rem; font-weight: 700; }
+.stage .v { font-family: var(--f-mono); font-size: .8rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.stage.pass { border-color: var(--good); background: var(--good-soft); }
+.stage.pass .v { color: var(--good); }
+.stage.drop { border-color: var(--bad); background: var(--bad-soft); }
+.stage.drop .v::after { content: " ✕ 버림"; color: var(--bad); font-weight: 600; }
+.stage.skipped { opacity: .4; border-style: dashed; }
