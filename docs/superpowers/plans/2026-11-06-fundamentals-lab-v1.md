@@ -76,7 +76,7 @@ fundamentals-lab/
 **Interfaces:**
 - Produces: npm 스크립트 `dev`, `build`, `test`(=`vitest run`), `typecheck`(=`tsc --noEmit`), `check-sources`(=`tsx scripts/check-sources.ts`). Vitest 환경 jsdom.
 
-- [ ] **Step 1:** `/mnt/data/Y-jaehyun/fundamentals-lab`에서 `git init -b main` (설계 문서는 이미 `docs/`에 있음).
+- [ ] **Step 1:** 저장소 루트에서 `git init -b main` (설계 문서는 이미 `docs/`에 있음).
 - [ ] **Step 2:** 의존성 고정: dev `vite@6`, `typescript@5`, `vitest@3`, `jsdom`, `tsx`, `@types/node`; dep `yaml@2`. `package-lock.json` 커밋.
 - [ ] **Step 3:** `CLAUDE.md`에 작업 규칙 기록: 공개 저장소 규칙(위 Global Constraints의 공개·출처·실측 규칙 그대로), 기준 브랜치 `main`, 콘텐츠 추가 시 `npm test && npm run check-sources` 필수.
 - [ ] **Step 4:** 실패 테스트 `tests/smoke.test.ts`: `import { APP_NAME } from '../src/main'` → `expect(APP_NAME).toBe('기초체력 랩')`. `npm test` → FAIL.
@@ -180,7 +180,7 @@ fundamentals-lab/
 
 - [ ] **Step 1: 실패 테스트** (메모리 `RepoReader` 사용): `passes when all paths and lines exist`, `fails on missing path`, `fails when quoted line missing`(에러에 장·문제 ID와 줄 내용 포함), `ignores ellipsis lines`, `checks sim quoted lines`.
 - [ ] **Step 2:** FAIL 확인 → 구현 → PASS.
-- [ ] **Step 3:** 로컬 실행 확인: `COURSE_SRC_EBPF=/mnt/data/Y-jaehyun/ebpf-fundamentals-kr npm run check-sources` (콘텐츠 아직 없음 → `0 errors`).
+- [ ] **Step 3:** 로컬 실행 확인: `COURSE_SRC_EBPF=../ebpf-fundamentals-kr npm run check-sources` (콘텐츠 아직 없음 → `0 errors`).
 - [ ] **Step 4:** Commit `feat: 콘텐츠 출처·인용 검사`.
 
 ---
@@ -370,7 +370,7 @@ fundamentals-lab/
 - 워크플로: push to `main` → `npm ci` → `npm run typecheck` → `npm test` → `actions/checkout`로 `Y-JaeHyun/ebpf-fundamentals-kr`를 `ref: <고정 sha>`, `fetch-depth: 0`, `path: .course-src/ebpf` → `COURSE_SRC_EBPF=.course-src/ebpf npm run check-sources` → `npm run build` → `actions/upload-pages-artifact`(dist) → `actions/deploy-pages`. PR에서는 배포 단계 제외.
 
 - [ ] **Step 1:** 워크플로 작성. `README.md`: 소개, 화면 구성(세 단계), 실측/추정 원칙, 콘텐츠 추가 방법(YAML 예시 한 개 + 검사 명령), 라이선스.
-- [ ] **Step 2:** 로컬 최종 확인: `npm run typecheck && npm test && COURSE_SRC_EBPF=/mnt/data/Y-jaehyun/ebpf-fundamentals-kr npm run check-sources && npm run build` 모두 성공. `npx vite preview`로 수동 점검: 라이트·다크, 400px 폭 가로 스크롤 없음(코드·레인·타임라인), 키보드로 전 단계 진행, reduced-motion, 사생활 보호 창에서 동작.
+- [ ] **Step 2:** 로컬 최종 확인: `npm run typecheck && npm test && COURSE_SRC_EBPF=../ebpf-fundamentals-kr npm run check-sources && npm run build` 모두 성공. `npx vite preview`로 수동 점검: 라이트·다크, 400px 폭 가로 스크롤 없음(코드·레인·타임라인), 키보드로 전 단계 진행, reduced-motion, 사생활 보호 창에서 동작.
 - [ ] **Step 3:** 공개 전 점검: `git grep -nE '/mnt/data|whatap|wogus|ATATT'` 결과 없음.
 - [ ] **Step 4:** Commit `ci: 테스트·출처 검사·Pages 배포`.
 - [ ] **Step 5 (사용자 승인 필요 — 여기서 멈추고 묻는다):** `gh repo create Y-JaeHyun/fundamentals-lab --public` → push → 저장소 Settings에서 Pages 소스를 GitHub Actions로 → 배포 URL 확인. 이후 별도 승인으로 `ebpf-fundamentals-kr` 각 장 README에 랩 링크 한 줄 추가.
