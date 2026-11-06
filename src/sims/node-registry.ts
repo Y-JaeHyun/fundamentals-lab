@@ -4,6 +4,7 @@ import { bufferQuoted, validateBufferLoss } from './buffer-loss/model';
 import { hookQuoted, validateHookPicker } from './hook-picker/model';
 import { orderQuoted, validateOrderSim } from './order/model';
 import { timelineQuoted, validateTimeline } from './packet-timeline/model';
+import { validateWiring, wiringQuoted } from './topic-wiring/model';
 import { validateVerifier, verifierQuoted } from './verifier/model';
 
 interface SimLogic {
@@ -17,6 +18,7 @@ const logic: Partial<Record<SimKind, SimLogic>> = {
   'hook-picker': { validate: validateHookPicker, quotedLines: hookQuoted },
   'packet-timeline': { validate: validateTimeline, quotedLines: timelineQuoted },
   'buffer-loss': { validate: validateBufferLoss, quotedLines: bufferQuoted },
+  'topic-wiring': { validate: validateWiring, quotedLines: wiringQuoted },
 };
 
 export function simValidators(): SimValidators {

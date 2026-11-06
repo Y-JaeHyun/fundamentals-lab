@@ -1,0 +1,10 @@
+id: '16'
+slug: 16-next-steps
+title: 다음 단계
+summary: 같은 개념을 Gazebo·Nav2·MoveIt 2, micro-ROS, 실제 하드웨어로 옮겨요. 이 저장소에서 잰 숫자를 실물에서 다시 재 봐요.
+linksOnly: true
+questions: []
+run:
+  cmd: git clone https://github.com/Y-JaeHyun/robotics-fundamentals-kr.git
+  sources:
+  - path: chapters/16-next-steps/README.md

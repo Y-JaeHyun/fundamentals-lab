@@ -3,6 +3,7 @@ import { bufferLossSim } from './buffer-loss/view';
 import { hookPickerSim } from './hook-picker/view';
 import { orderSim } from './order/view';
 import { packetTimelineSim } from './packet-timeline/view';
+import { topicWiringSim } from './topic-wiring/view';
 import { verifierSim } from './verifier/view';
 
 export interface SimContext {
@@ -24,6 +25,7 @@ const views: Partial<Record<SimKind, SimView>> = {
   'hook-picker': hookPickerSim,
   'packet-timeline': packetTimelineSim,
   'buffer-loss': bufferLossSim,
+  'topic-wiring': topicWiringSim,
 };
 
 export function getSim(kind: SimKind): SimView | undefined {

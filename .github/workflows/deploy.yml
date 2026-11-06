@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -26,10 +30,17 @@ jobs:
           repository: Y-JaeHyun/ebpf-fundamentals-kr
           path: .course-src/ebpf
           fetch-depth: 0
+      - name: 코스 저장소(로봇) 가져오기
+        uses: actions/checkout@v4
+        with:
+          repository: Y-JaeHyun/robotics-fundamentals-kr
+          path: .course-src/robotics
+          fetch-depth: 0
       - name: 출처 검사
         run: npm run check-sources
         env:
           COURSE_SRC_EBPF: .course-src/ebpf
+          COURSE_SRC_ROBOTICS: .course-src/robotics
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'push'

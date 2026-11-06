@@ -1,0 +1,91 @@
+id: '04'
+slug: 04-rtos
+title: RTOS
+summary: RTOS는 준비된 태스크 중 우선순위가 가장 높은 것을 돌려요. 자원 잠금에는 우선순위 상속 뮤텍스를 써요.
+questions:
+  - id: delay-vs-until
+    kind: choice
+    prompt: 3틱마다 돌게 하려던 L 태스크의 시작 틱이에요. 1a는 vTaskDelay(3), 1b는 xTaskDelayUntil(&last, 3)이에요. 왜 1a는 4틱 주기일까요?
+    log: |
+      [1a] L start ticks: 0 4 8 12 16 20
+      [1b] L start ticks: 0 3 6 9 12 15
+    options:
+      - text: H가 5틱마다 L을 선점해서 L의 시작이 매번 1틱씩 뒤로 밀렸다
+        feedback: H가 끼어든 건 일부 주기뿐인데 시작 틱은 매번 4씩 벌어져요. 원인은 vTaskDelay의 기준점이에요.
+      - text: vTaskDelay는 부른 순간부터 3틱이라 일한 만큼 늘었다
+        correct: true
+        feedback: 맞아요. L은 틱 0에 시작해 1.5ms 일하고 틱 1에 vTaskDelay(3)을 불러 틱 4에 깼어요. 주기가 중요하면 xTaskDelayUntil을 써요.
+      - text: OS 틱이 1kHz가 아니라 약 750Hz로 돌아서 3틱이 4ms가 됐다
+        feedback: 설정은 tick=1000 Hz이고 1b에서는 정확히 3틱 주기가 나왔어요. 틱 속도 문제가 아니에요.
+    sources:
+      - path: chapters/04-rtos/README.md
+  - id: inversion-summary
+    kind: choice
+    prompt: L(우선순위 1)이 쥔 자원을 H(3)가 기다리고, 상관없는 M(2)이 CPU를 쓰는 실험의 요약이에요. 무엇을 알 수 있을까요?
+    log: |
+      [3] M_work= 0 ms  binary semaphore: H waited  2173 us   mutex: H waited  2148 us
+      [3] M_work=10 ms  binary semaphore: H waited 12185 us   mutex: H waited  2148 us
+      [3] M_work=20 ms  binary semaphore: H waited 22197 us   mutex: H waited  2148 us
+    options:
+      - text: 이진 세마포어는 M의 일이 H 대기에 더해지고 뮤텍스는 막는다
+        correct: true
+        feedback: 맞아요. 이진 세마포어는 주인이 없어 우선순위 상속이 안 돼요. 뮤텍스에서는 M이 얼마나 일하든 L의 남은 일만큼만 기다렸어요.
+      - text: 뮤텍스가 우선순위 역전을 완전히 없애서 H는 전혀 기다리지 않았다
+        feedback: 뮤텍스에서도 H는 2,148µs를 기다렸어요. 우선순위 상속은 역전을 없애지 않고 L이 자원을 쥔 시간으로 상한을 씌워요.
+      - text: 둘 다 M_work와 무관하고, 차이는 세마포어 생성 비용 때문이다
+        feedback: 이진 세마포어 쪽은 M_work가 10ms 늘 때마다 H 대기도 약 10ms씩 늘었어요.
+    sources:
+      - path: chapters/04-rtos/README.md
+  - id: inheritance-proof
+    kind: choice
+    prompt: 뮤텍스 실험에서 L은 우선순위 1로 만들어졌는데 이 줄이 찍혔어요. 무엇을 뜻할까요?
+    log: |
+      [3 mutex ] tick=  3 t=  3136 us  L give lock      prio=3
+    options:
+      - text: L의 우선순위가 영구히 3으로 바뀌어 이후에도 계속 3으로 돈다
+        feedback: 놓은 뒤에는 원래 우선순위 1로 돌아가요. 그래서 L after give 기록은 맨 마지막(틱 13)에 남았어요.
+      - text: H가 L을 선점해 L 대신 자원을 놓은 것이다
+        feedback: 자원을 놓은 건 L이에요. H는 그동안 자원을 기다리며 Blocked였어요.
+      - text: H가 기다리는 동안 커널이 L을 H와 같은 3으로 올렸다
+        correct: true
+        feedback: 맞아요. 우선순위 상속의 직접 증거예요. 그래서 틱 2에 깨어난 M(2)이 L(3)을 밀어내지 못했어요.
+    sources:
+      - path: chapters/04-rtos/README.md
+  - id: queue-recv-first
+    kind: choice
+    prompt: 소비자 C(우선순위 3)가 생산자 P(2)보다 높은 큐 실험이에요. 왜 C의 recv가 P의 sent보다 먼저 기록됐을까요?
+    log: |
+      [2a] tick= 10 t= 10003 us  P consumer Blocked, send item=1
+      [2a] tick= 10 t= 10016 us  C recv item=1
+      [2a] tick= 10 t= 10036 us  P sent item=1
+    options:
+      - text: C가 큐를 계속 폴링하다가 P보다 먼저 항목을 발견했다
+        feedback: C는 보내기 직전 매번 Blocked였어요. consumer loops=5로, 받은 수와 정확히 같게만 돌았어요.
+      - text: 항목이 들어가는 순간 C가 깨어나 P를 선점했다
+        correct: true
+        feedback: 맞아요. P의 xQueueSend가 돌아오기도 전에 C가 받아서 처리했어요. 52ms 동안 C가 쓴 CPU는 127µs뿐이었어요.
+      - text: 사건 기록 배열이 우선순위 순으로 정렬돼서 출력됐다
+        feedback: 기록은 (틱, µs, 누가, 무엇)을 일어난 순서대로 적어요. t= 값도 C가 먼저예요.
+    sources:
+      - path: chapters/04-rtos/README.md
+  - id: backpressure
+    kind: choice
+    prompt: 빠른 생산자(우선순위 3)가 3칸 큐에 portMAX_DELAY로 6개를 보내고, 느린 소비자(2)는 2틱마다 하나씩 꺼내요. 어떻게 됐을까요?
+    options:
+      - text: 큐가 넘쳐 4번째부터 항목이 버려졌다
+        feedback: portMAX_DELAY로 보내면 가득 찼을 때 버리지 않고 기다려요. 항목은 하나도 버려지지 않았어요.
+      - text: 생산자가 우선순위가 높아 소비자는 6개를 다 보낼 때까지 못 돌았다
+        feedback: 4를 넣으려는 순간 큐가 가득 차 P가 Blocked가 됐고, 그제야 C가 돌 수 있었어요.
+      - text: 큐가 가득 차자 생산자가 잠들어 소비자 속도에 맞춰졌다
+        correct: true
+        feedback: 맞아요. 배압(backpressure)이에요. 이후 P는 C가 2틱마다 하나 꺼낼 때마다 하나씩 넣었어요.
+    sources:
+      - path: chapters/04-rtos/README.md
+run:
+  cmd: make -C chapters/04-rtos/code build run
+  expect: |
+    [1b] L start ticks: 0 3 6 9 12 15
+    [3] M_work=10 ms  binary semaphore: H waited 12185 us   mutex: H waited  2148 us
+    A와 B 출력: 바이트 단위로 같다 (결정적)
+  sources:
+    - path: chapters/04-rtos/README.md

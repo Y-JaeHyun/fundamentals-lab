@@ -1,0 +1,95 @@
+id: '14'
+slug: 14-pid
+title: PID 제어
+summary: P는 밀고, I는 남은 오차를 없애고, D는 브레이크를 걸어요. 포화·샘플 주기·잡음도 설계의 일부예요.
+questions:
+- id: p-only
+  kind: choice
+  prompt: 늘 −2N으로 미는 경사 위의 수레를 Kp 20의 P 제어만으로 1m에 보내려 해요. 결과를 보고 원인을 골라 보세요.
+  log: |
+    P                  0.30s      35.3%       >10s       +0.1000m     20.0N
+  options:
+  - text: 0.9m에서 P항이 20 × 0.1 = 2N을 내 경사와 비겨서 멈췄다
+    correct: true
+    feedback: 맞아요. 남는 오차 = 외란 ÷ Kp예요. Kp를 키우면 줄지만 0이 되지는 않고 진동만 심해져요.
+  - text: 샘플 주기 10ms가 너무 길어서 목표에 닿지 못했다
+    feedback: 같은 Ts=10ms에서 PI와 PID는 오차가 0이 됐어요. 원인은 주기가 아니라 외란이에요.
+  - text: 마찰 b가 커서 0.1m 앞에서 속도가 0이 됐다
+    feedback: 남은 오차 0.1m는 정확히 외란 2N ÷ Kp 20이에요. 마찰이 아니라 경사와 P항이 비긴 거예요.
+  sources:
+  - path: chapters/14-pid/README.md
+- id: which-term
+  kind: choice
+  prompt: 같은 수레에서 P, PD, PI, PID를 비교했어요. 정상상태 오차를 없앤 것은 어떤 항이고, 그 대가는 무엇이었을까요?
+  log: |
+    PD                 1.31s       0.0%       >10s       +0.1000m     20.0N
+    PI                 0.28s      51.9%       5.18s      +0.0000m     20.2N
+  options:
+  - text: D항. 멈출 때 브레이크를 걸어 오차를 없앴지만 느려졌다
+    feedback: PD도 오차가 0.1m 그대로예요. 멈춰 있으면 속도가 0이라 D는 아무 일도 하지 않아요.
+  - text: I항. 오차를 0으로 만들었지만 오버슈트가 52%로 커졌다
+    correct: true
+    feedback: 맞아요. 적분은 과거의 오차라 늦게 반응해요. D까지 더한 PID는 오버슈트 8.5%로 정착했어요.
+  - text: I항. 오차를 0으로 만들었고 오버슈트도 P보다 줄었다
+    feedback: PI의 오버슈트 51.9%는 P(35.3%)보다 커요. 쌓인 적분이 늦게 빠지기 때문이에요.
+  sources:
+  - path: chapters/14-pid/README.md
+- id: windup
+  kind: choice
+  prompt: 구동기를 ±5N으로 묶었더니 적분항이 이렇게 쌓였어요. 클램핑(포화 중 적분 멈춤)을 넣으면 어떻게 될까요?
+  log: |
+    적분항 I (t=1.0s): 그대로=+6.81N  클램핑=+1.40N  (외란을 버티는 데 필요한 값은 +2.00N)
+  options:
+  - text: 상승 시간이 포화 없을 때만큼 빨라진다
+    feedback: 상승 시간은 0.57s에서 0.98s로 오히려 늘었어요. 힘이 모자라면 빨리 갈 수는 없어요.
+  - text: 오버슈트가 0.2%로 줄고 1.66s에 정착한다
+    correct: true
+    feedback: 맞아요. 포화가 없던 경우(3.91s)보다도 빨리 정착했어요. 안티 와인드업은 도착한 뒤 지나치는 것을 고쳐요.
+    log: |
+      포화+클램핑        0.98s       0.2%       1.66s      +0.0000m      5.0N
+  - text: 적분이 멈춰 경사를 못 버티고 정상상태 오차가 남는다
+    feedback: 적분항 최대가 2.04N으로 필요한 2N에 맞춰 멈췄어요. 정상상태 오차는 0이었어요.
+  sources:
+  - path: chapters/14-pid/README.md
+- id: sample-period
+  kind: choice
+  prompt: 같은 게인으로 샘플 주기 Ts만 10ms부터 300ms까지 바꿨어요. 결과를 가장 잘 설명한 것은 무엇일까요?
+  log: |
+    Ts=100ms           0.49s       6.7%       3.90s      -0.0006m     21.0N
+    Ts=200ms           0.28s      22.7%       5.84s      -0.0009m     22.0N
+    Ts=300ms           0.23s    3304.7%       >10s       +3.5470m   1784.5N
+  options:
+  - text: 주기가 길수록 오버슈트가 줄어드니 느린 주기가 더 좋다
+    feedback: 100ms까지 조금 줄었을 뿐이에요. 200ms에서 22.7%로 나빠졌고 300ms에서는 발산했어요.
+  - text: 주기가 길어질수록 성능이 고르게 조금씩 나빠진다
+    feedback: 10ms~100ms는 거의 같았어요. 영향은 서서히가 아니라 어느 선을 넘으면 급격히 나타나요.
+  - text: 100ms까지는 거의 같다가 어느 선을 넘자 급격히 나빠져 발산했다
+    correct: true
+    feedback: 맞아요. 원인은 지연이에요. 경험칙은 폐루프 상승 시간의 1/10 이하, 여기선 50ms 이하예요. 주기를 바꾸면 게인도 다시 맞춰야 해요.
+  sources:
+  - path: chapters/14-pid/README.md
+- id: d-noise
+  kind: choice
+  prompt: 위치 센서에 σ=1mm 잡음을 넣었더니 D를 그대로 쓴 PID의 제어 입력이 크게 떨렸어요. 어떻게 줄였을까요?
+  log: |
+    PI(D없음)              0.048N             2.531mm        51.9%
+    PID 미분 그대로        0.800N             0.648mm         8.5%
+  options:
+  - text: 미분값에 시상수 50ms 1차 저역통과 필터를 달았다
+    correct: true
+    feedback: 맞아요. u 표준편차가 0.119N으로 1/7이 됐고 오버슈트는 7.1%로 조금 좋아졌어요. 시상수를 너무 키우면 필터가 지연이 돼요.
+    log: |
+      PID 미분 필터50ms      0.119N             0.697mm         7.1%
+  - text: 샘플 주기를 1ms로 줄여 차분을 더 정밀하게 했다
+    feedback: 차분은 잡음을 1/Ts배로 키워요. Ts를 줄이면 오히려 더 커져요.
+  - text: Kd를 키워 브레이크를 더 세게 걸었다
+    feedback: 미분항은 측정 잡음을 Kd/Ts배로 키워요. Kd를 키우면 떨림도 커져요.
+  sources:
+  - path: chapters/14-pid/README.md
+run:
+  cmd: make -C chapters/14-pid/code build run
+  expect: |
+    PID                0.57s       8.5%       3.91s      -0.0005m     20.1N
+    포화+클램핑        0.98s       0.2%       1.66s      +0.0000m      5.0N
+  sources:
+  - path: chapters/14-pid/README.md

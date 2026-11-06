@@ -1,4 +1,4 @@
-export const SIM_KINDS = ['order', 'verifier', 'hook-picker', 'packet-timeline', 'buffer-loss'] as const;
+export const SIM_KINDS = ['order', 'verifier', 'hook-picker', 'packet-timeline', 'buffer-loss', 'topic-wiring'] as const;
 export type SimKind = (typeof SIM_KINDS)[number];
 
 /** 코스 저장소 루트 기준 경로 (고정 커밋에서 확인한다) */

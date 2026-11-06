@@ -1,0 +1,65 @@
+id: '00'
+slug: 00-setup
+title: 실습 환경
+summary: PC 한 대와 Docker 도구 이미지 두 개면 돼요. make images, make check 모두 root가 필요 없어요.
+questions:
+  - id: root-chapters
+    kind: choice
+    prompt: 이 저장소에서 root 권한이 필요한 장은 어디일까요?
+    options:
+      - text: 02~04장. QEMU로 Cortex-M 펌웨어를 부팅해야 해서
+        feedback: 임베디드 장은 robofund/embedded 이미지 안에서 빌드하고 QEMU로 돌려요. root가 필요 없어요.
+      - text: 09~15장. ROS2 노드가 네트워크로 서로를 찾아야 해서
+        feedback: ROS2 예제는 노드를 한 컨테이너 안에서 모두 띄우고 --network host도 쓰지 않아요. root가 필요 없어요.
+      - text: 06장(가상 CAN vcan)과 08장(실시간 스케줄링 측정)
+        correct: true
+        feedback: 맞아요. root가 필요한 장은 이 두 개뿐이에요. 나머지는 docker 그룹만 있으면 돼요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: sudo-images
+    kind: choice
+    prompt: 권한 문제가 귀찮아서 sudo make images로 이미지를 만들었어요. 무엇이 문제일까요?
+    options:
+      - text: root로 만든 이미지는 일반 사용자가 docker run으로 실행할 수 없다
+        feedback: 이미지 자체는 상관없다고 README에 적혀 있어요. 문제는 그다음 장에서 생기는 파일이에요.
+      - text: 이후 장에서 out/이 root 소유로 생기면 일반 사용자 실행이 꼬인다
+        correct: true
+        feedback: 맞아요. docker 그룹에 사용자를 넣고 일반 사용자로 실행하는 것이 이 저장소의 방식이에요.
+      - text: root로 빌드하면 ROS 이미지 안의 ROS_DISTRO가 jazzy로 잡히지 않는다
+        feedback: make check는 이미지 안의 ROS_DISTRO=jazzy를 확인할 뿐, 누가 빌드했는지와는 상관없어요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: network-host
+    kind: choice
+    prompt: ROS2 실습을 하려고 컨테이너 여러 개를 --network host로 띄웠어요. 무엇이 걱정될까요?
+    options:
+      - text: 컨테이너끼리 디스커버리가 막혀 노드가 서로를 못 찾는다
+        feedback: 반대예요. ROS2 노드는 같은 네트워크의 다른 노드를 자동으로 찾아요. 그래서 너무 많이 찾는 게 문제예요.
+      - text: 다른 실습이나 다른 사람의 노드와 그래프가 섞인다
+        correct: true
+        feedback: 맞아요. 그래서 이 저장소는 노드를 한 컨테이너 안에서 모두 띄우고, 장마다 ROS_DOMAIN_ID도 따로 둬요.
+      - text: turtlesim 창이 호스트 화면에 여러 개 떠서 실습이 느려진다
+        feedback: turtlesim은 QT_QPA_PLATFORM=offscreen으로 화면 없이 돌려요. 창 문제는 아니에요.
+    sources:
+      - path: chapters/00-setup/README.md
+  - id: turtlesim-offscreen
+    kind: choice
+    prompt: 화면이 없는 환경에서 turtlesim 결과를 어떻게 확인할까요?
+    options:
+      - text: offscreen으로 띄우고 pose 토픽을 읽어 텍스트로 검증한다
+        correct: true
+        feedback: 맞아요. turtlesim은 원래 창을 띄우는 2D 시뮬레이터지만 QT_QPA_PLATFORM=offscreen으로 화면 없이 돌려요.
+      - text: 호스트에 X 서버를 띄우고 컨테이너를 --network host로 연결한다
+        feedback: 이 저장소는 --network host를 쓰지 않고, 화면도 띄우지 않아요.
+      - text: QEMU의 -nographic 옵션으로 터미널에 거북이를 그린다
+        feedback: -nographic은 02장 이후 임베디드 QEMU 실행 옵션이에요. turtlesim과는 상관없어요.
+    sources:
+      - path: chapters/00-setup/README.md
+run:
+  cmd: make check
+  expect: |
+    [OK]   robofund/ros:jazzy
+    [OK]   robofund/embedded:24.04
+    결과: 필수 항목 통과
+  sources:
+    - path: chapters/00-setup/README.md
