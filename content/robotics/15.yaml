@@ -1,0 +1,80 @@
+id: '15'
+slug: 15-closed-loop
+title: ROS2로 닫는 제어 루프
+summary: pose 구독, 계산, cmd_vel 발행을 주기적으로 반복해요. 같은 게인도 주기가 느리거나 지연이 크면 흔들려요.
+questions:
+- id: timer-not-callback
+  kind: choice
+  prompt: goto_goal 노드는 pose 콜백에서 최신 pose를 저장만 하고, 계산과 발행은 타이머 콜백에서 해요. 왜 그렇게 할까요?
+  options:
+  - text: 제어 주기를 센서 주기와 따로 정하려고
+    correct: true
+    feedback: 맞아요. pose 콜백에서 제어하면 제어 주기가 센서에 끌려가요. 센서가 멈추면 제어도 멈추고, 몰려 오면 명령도 몰려요.
+  - text: pose 콜백 안에서는 발행이 금지돼 있어서
+    feedback: 그런 규칙은 없어요. 문제는 제어 주기가 센서 주기에 끌려간다는 점이에요.
+  - text: 타이머가 pose 발행 주기 62.5Hz보다 항상 빨라서
+    feedback: 이 장은 타이머를 50Hz, 10Hz, 5Hz, 3Hz로 바꿔 가며 돌렸어요. 빨라도 새 정보는 16ms마다만 생겨요.
+  sources:
+  - path: chapters/15-closed-loop/README.md
+- id: kw-ts
+  kind: choice
+  prompt: Kw=6은 그대로 두고 제어 주기만 5Hz로 낮췄어요. 방향이 19도 넘어간 이유는 무엇일까요?
+  log: |
+    run  cond=5Hz delay=0ms #1  reach=6.40s  final_err=0.084m  cycles=32  loop=5.0Hz  jitter=0.09ms  align=0.60s  head_over=19.0deg  osc=1  path=1.02x
+  options:
+  - text: 타이머 jitter가 커서 주기가 흔들렸다
+    feedback: jitter는 0.07~0.19ms였고 loop도 5.0Hz로 지켜졌어요. 주기 자체는 정확했어요.
+  - text: 한 주기 뒤 오차 배율 1 − Kw·Ts가 −0.2라 부호가 바뀌었다
+    correct: true
+    feedback: 맞아요. 넘어갔다 돌아와요. 같은 게인도 Kw·Ts가 동작을 정해요. 3Hz(−1.0)는 안정 경계라 좌우로 계속 왕복했어요.
+  - text: Vmax 2m/s에 걸려 회전할 시간이 모자랐다
+    feedback: Vmax는 선속도 상한이에요. 방향 오버슈트는 각속도 쪽 Kw·Ts가 정해요.
+  sources:
+  - path: chapters/15-closed-loop/README.md
+- id: delay-vs-period
+  kind: choice
+  prompt: 제어 주기는 50Hz로 두고 pose를 일부러 늦게 보게 했어요. 지연이 커질수록 어떻게 됐을까요?
+  options:
+  - text: 주기가 빠르니 지연은 거의 영향이 없었다
+    feedback: 100ms 지연만으로도 방향이 20도 넘게 넘어갔어요. 빨리 돌아도 보는 정보가 늦으면 지나간 상태에 명령을 내려요.
+  - text: 도착 시간이 지연만큼 늘어났을 뿐 경로는 같았다
+    feedback: 200ms에서 reach는 크게 늘지 않았지만 100도 넘게 넘어가며 여러 번 왕복했어요. 도착 시간만 보면 문제를 놓쳐요.
+  - text: 오버슈트와 왕복이 커지다가 400ms에서 발산해 벽에 부딪혔다
+    correct: true
+    feedback: 맞아요. 지연은 주기보다 더 나빠요. 400ms에서는 한 번도 도착하지 못했어요.
+    log: |
+      sum  cond=50Hz delay=400ms  reached=0/3  reach=미도착  final_err=10.984m  cycles=741  head_over=179.1deg  osc=48  path=3.35x
+  sources:
+  - path: chapters/15-closed-loop/README.md
+- id: reach-only
+  kind: choice
+  prompt: 50Hz + 지연 200ms 조건은 도착 시간이 지연 없는 50Hz와 크게 다르지 않았어요. 진동은 어떤 지표로 알아볼 수 있을까요?
+  log: |
+    sum  cond=50Hz delay=200ms  reached=3/3  reach=6.60s~6.64s  final_err=0.075m~0.076m  cycles=330~332  head_over=104.6deg  osc=13~14  path=1.19x
+  options:
+  - text: final_err가 문턱 0.1m보다 작으니 진동이 없었다
+    feedback: final_err가 작은 건 지연 때문에 멈출 판단이 늦어 더 가까이 와 있었기 때문이에요. 진동과는 다른 이야기예요.
+  - text: cycles가 많아 제어가 더 촘촘했다는 뜻이다
+    feedback: cycles는 계산 횟수예요. 주기는 똑같이 50Hz였어요.
+  - text: head_over, osc, path가 방향 진동을 보여 준다
+    correct: true
+    feedback: 맞아요. 105도 넘어가고 13~14번 왕복했고 경로가 1.19배였어요. 오버슈트·진동·경로 길이를 같이 봐요.
+  sources:
+  - path: chapters/15-closed-loop/README.md
+- id: repeat-3hz
+  kind: choice
+  prompt: 같은 설정을 여러 번 돌렸더니 3Hz 조건만 결과가 크게 달랐어요. 어떻게 받아들여야 할까요?
+  options:
+  - text: 안정 경계라 작은 타이밍 차이가 커진다. 여러 번 돌려 범위를 본다
+    correct: true
+    feedback: 맞아요. 제어 타이머와 turtlesim 16ms 갱신의 위상 관계가 매번 조금씩 달라요. 6회 중 4회만 도착했어요.
+  - text: 3Hz 타이머가 부정확해 주기가 매번 달라졌으니 한 번만 믿고 버린다
+    feedback: loop는 3.0Hz로 지켜졌고 jitter도 작았어요. 타이머가 아니라 경계에 있는 시스템이 원인이에요.
+  - text: turtlesim이 실행마다 다른 출발점을 써서 비교할 수 없다
+    feedback: 처음에 /reset으로 초기화하고, 시도마다 teleport_absolute로 같은 자리·같은 방향에 놓았어요.
+  sources:
+  - path: chapters/15-closed-loop/README.md
+run:
+  cmd: make -C chapters/15-closed-loop/code build run
+  sources:
+  - path: chapters/15-closed-loop/README.md

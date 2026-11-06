@@ -1,0 +1,80 @@
+id: '12'
+slug: 12-tf2
+title: tf2 좌표계
+summary: tf2는 프레임 트리를 따라 좌표를 바꿔 줘요. 조회는 언제의 변환인지도 묻고, 버퍼 밖 시각은 예외가 나요.
+questions:
+- id: point-to-map
+  kind: choice
+  prompt: 레이저 앞 1 m의 점을 트리를 따라 바꿨어요. odom은 map에 대해 x=2, y=1, yaw=90°예요. map에서는 어디일까요?
+  log: |
+    [point] laser    : (1.000, 0.000, 0.000)
+    [point] base_link: (1.200, 0.000, 0.100)
+    [point] odom     : (2.200, 0.000, 0.100)
+  options:
+  - text: (4.200, 1.000, 0.100)
+    feedback: 회전 없이 더하기만 한 값이에요. odom이 90° 돌아 있으니 (x, y)를 (−y, x)로 먼저 돌려야 해요.
+  - text: (2.000, 3.200, 0.100)
+    correct: true
+    feedback: 맞아요. (2.2, 0)을 90° 돌리면 (0, 2.2), 여기에 (2, 1)을 더해요. 로봇의 앞(+x)이 지도의 +y예요.
+    log: |
+      [point] map      : (2.000, 3.200, 0.100)
+  - text: (2.000, -1.200, 0.100)
+    feedback: 반대 방향(시계)으로 돌린 값이에요. ROS 관례에서 반시계가 +예요.
+  - text: (2.000, 2.200, 0.100)
+    feedback: 그건 레이저 원점의 map 좌표예요. 앞 1 m 점은 거기서 +y로 1 m 더 가요.
+  sources:
+  - path: chapters/12-tf2/README.md
+- id: which-exception
+  kind: choice
+  prompt: map←camera_link를 물었더니 이 문구가 나왔어요. 무엇을 빠뜨린 걸까요?
+  log: |
+    Could not find a connection between 'map' and 'camera_link' because they are not part of the same tree.Tf has two or more unconnected trees.
+  options:
+  - text: camera_link를 아무도 발행하지 않았다
+    feedback: 없는 프레임이면 LookupException(passed to lookupTransform argument source_frame does not exist)이 나요.
+  - text: 버퍼에 없는 미래 시각으로 물었다
+    feedback: 시각 문제면 ExtrapolationException이 나요. 이건 ConnectivityException이에요.
+  - text: world 트리를 map 트리에 잇는 부모 연결이 없다
+    correct: true
+    feedback: 맞아요. world→camera_link가 map 트리와 떨어져 있어요. view_frames의 .gv에서 뿌리가 둘인지 보면 알 수 있어요.
+  sources:
+  - path: chapters/12-tf2/README.md
+- id: future-static
+  kind: choice
+  prompt: 로봇이 멈춘 뒤 1초 뒤 시각으로 두 조회를 했어요. 왜 하나만 성공했을까요?
+  log: |
+    [lookup] map←laser, 1초 뒤(미래) 시각: ExtrapolationException (0.00s)
+    [lookup] base_link←laser(정적만), 1초 뒤 시각: OK xyz=(0.200, 0.000, 0.100) yaw=0.0° (0.00s)
+  options:
+  - text: map←laser는 동적 변환 odom→base_link를 거쳐 미래 데이터가 없다
+    correct: true
+    feedback: 맞아요. 로봇이 멈춰 있어도 동적 변환은 미래를 몰라요. 정적 변환만 거치는 조회는 시각 제약이 없어요.
+  - text: map←laser는 사슬이 길어서 조회 시간이 초과됐다
+    feedback: 둘 다 0.00초에 끝났어요. 길이가 아니라 동적 변환이 끼어 있는지가 차이예요.
+  - text: base_link←laser는 버퍼가 1초 앞 값까지 미리 예측해 둔다
+    feedback: tf2는 외삽하지 않아요. 정적 변환은 시간과 무관하게 저장돼서 아무 시각에나 쓰여요.
+  sources:
+  - path: chapters/12-tf2/README.md
+- id: latest-lag
+  kind: choice
+  prompt: 0.5 m/s로 가는 동안 최신(Time())과 0.5초 전을 비교했어요. 차이가 0.25 m보다 작은 이유는 뭘까요?
+  log: |
+    [lookup] odom←base_link 최신 x=0.375, 0.5초 전 x=0.140, 차이 0.235 m
+    [lookup] odom←base_link 최신 x=0.525, 0.5초 전 x=0.296, 차이 0.229 m
+  options:
+  - text: 0.5초 전 값은 보간이라 실제보다 앞선 위치가 나온다
+    feedback: 보간은 두 샘플 사이 값을 줄 뿐이에요. 차이가 줄어든 건 최신 쪽이 덜 나갔기 때문이에요.
+  - text: 버퍼가 0.5초 전 샘플을 이미 지워서 근삿값을 썼다
+    feedback: 버퍼는 기본 10초를 보관해요. 0.5초 전은 충분히 남아 있어요.
+  - text: Time()은 가장 최근에 받은 샘플이라 지금보다 최대 0.05초 오래됐다
+    correct: true
+    feedback: 맞아요. 20Hz 한 주기만큼 덜 나간 위치예요. 센서 데이터는 header.stamp로 조회해야 해요.
+  sources:
+  - path: chapters/12-tf2/README.md
+run:
+  cmd: make -C chapters/12-tf2/code build run
+  expect: |
+    [point] map      : (2.000, 3.200, 0.100)
+    [lookup] map←camera(아무도 발행 안 함): LookupException (0.00s)
+  sources:
+  - path: chapters/12-tf2/README.md

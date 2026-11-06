@@ -1,0 +1,77 @@
+id: '05'
+slug: 05-serial-framing
+title: 직렬 통신과 프레이밍
+summary: UART는 바이트 스트림이라 경계가 없어요. 헤더·길이·CRC로 프레임을 얹고, 깨지면 1바이트만 버리고 다시 찾아요.
+questions:
+  - id: naive-drop
+    kind: choice
+    prompt: 6바이트씩 잘라 읽는 naive 해석기에서 seq 100의 첫 바이트 하나만 잃었어요. 무슨 일이 생겼을까요?
+    log: |
+      해석 결과 1999개: 맞음 100, 틀린 값 1899, 잃음 1900
+      [ 100] 보냄 (100, -20, 22)  해석 (60416, 5887, 25856)
+      [1998] 보냄 (1998, -163, 150)  해석 (23815, -26881, -12544)
+    options:
+      - text: 경계가 1바이트 밀린 채 끝까지 가서 그 뒤가 전부 틀렸다
+        correct: true
+        feedback: 맞아요. naive는 틀렸다는 것을 알 방법이 없어 1899개의 틀린 값을 정상처럼 내놓았어요. 헤더+CRC와 COBS+CRC는 seq 100 하나만 잃었어요.
+      - text: seq 100 하나만 틀리고 다음 메시지부터 저절로 다시 맞춰졌다
+        feedback: 끝 메시지 [1998]까지 틀렸어요. 경계를 다시 찾을 단서가 없어서 저절로 맞춰지지 않아요.
+      - text: 해석기가 길이 불일치를 감지해 나머지 1899개를 모두 거부했다
+        feedback: 거부하지 않았어요. 통계는 ok_shape 1999로, 틀린 값을 모두 정상인 모양으로 내놓았어요.
+    sources:
+      - path: chapters/05-serial-framing/README.md
+  - id: skip-policy
+    kind: choice
+    prompt: 같은 잡음 채널, 같은 CRC 거부 65회인데 맞게 받은 개수가 달라요. 왜 통째로 버리는 쪽이 더 잃었을까요?
+    log: |
+      --- header+CRC (실패 시 1바이트만 버림)
+      해석 결과 1915개: 맞음 1914, 틀린 값 1, 잃음 86
+      --- header+CRC (실패 시 후보 프레임 전체 버림)
+      해석 결과 1888개: 맞음 1887, 틀린 값 1, 잃음 113
+    options:
+      - text: 통째로 버리면 CRC 계산을 덜 해서 검사를 건너뛴 프레임이 생겼다
+        feedback: CRC 거부 횟수는 둘 다 65회예요. 검사를 건너뛴 게 아니라 버린 바이트가 많았어요.
+      - text: 후보를 통째로 버리면 멀쩡한 다음 프레임의 시작 표시까지 버린다
+        correct: true
+        feedback: 맞아요. 바이트를 잃은 프레임은 다음 프레임의 앞부분을 끌어와 길이를 채워요. 버린 바이트도 1054에서 1351로 늘었어요.
+      - text: 통째로 버리는 쪽은 COBS를 쓰지 않아 0x00 경계를 놓쳤다
+        feedback: 둘 다 헤더+CRC 형식이에요. 다른 건 CRC가 틀렸을 때 버리는 양뿐이에요.
+    sources:
+      - path: chapters/05-serial-framing/README.md
+  - id: crc-pass
+    kind: choice
+    prompt: 헤더+CRC 해석기가 이런 값을 받아들였어요. 이 결과가 주는 교훈은 무엇일까요?
+    log: |
+      CRC를 통과한 틀린 값: 보냄 (1560, 134, -119) → 해석 (1560, 134, -12407)
+    options:
+      - text: CRC-16 구현에 버그가 있으니 표준 검사값부터 다시 확인해야 한다
+        feedback: crc16("123456789") = 0x29B1로 표준 검사값과 맞았어요. 구현은 정상이고, 약 1/65536 확률이 실제로 나온 거예요.
+      - text: CRC는 거의 다 잡지만 전부는 아니어서 범위·순번 검사를 더해야 한다
+        correct: true
+        feedback: 맞아요. 바이트 하나를 잃고 끌어온 바이트의 CRC가 우연히 맞았어요. 속도 범위, 순번, 물리적으로 가능한 변화량 같은 상식 검사를 한 겹 더 둬요.
+      - text: 비트 1개 오류를 CRC-16이 못 잡아서 생긴 일이다
+        feedback: 1비트 오류 72가지는 전부 잡았어요. 이건 바이트를 잃어 위치가 어긋난 큰 손상이에요.
+    sources:
+      - path: chapters/05-serial-framing/README.md
+  - id: pty-raw
+    kind: choice
+    prompt: 0x00~0xFF 256바이트를 pty로 보냈는데 ICANON만 끈 설정에서는 227바이트만 왔어요. 이진 프로토콜이라면 어떻게 해야 할까요?
+    log: |
+      raw (tty.setraw)      : 256바이트 보냄 → 받은 256바이트, 안 온 값 [], 0x0a 개수 1, 받은 앞부분 00 01 02 03
+    options:
+      - text: ISIG만 더 끄면 줄 규칙이 모두 꺼져 256바이트가 다 온다
+        feedback: ICANON+ISIG를 꺼도 0d 11 13이 사라져 254바이트였어요. ICRNL, IXON도 남아 있어요.
+      - text: 보율을 1000000으로 올리면 tty가 바이트를 바꿀 시간이 없다
+        feedback: 바이트를 바꾸고 삼키는 건 줄 규칙(line discipline) 설정 때문이지 속도 때문이 아니에요.
+      - text: 포트를 raw 모드로 열어 줄 규칙이 바이트를 바꾸지 않게 한다
+        correct: true
+        feedback: 맞아요. 기본값에서는 CR이 LF로 바뀌고 XON/XOFF가 먹히고 신호 문자가 큐를 비워요. raw에서만 256바이트가 그대로 왔어요.
+    sources:
+      - path: chapters/05-serial-framing/README.md
+run:
+  cmd: make -C chapters/05-serial-framing/code build run
+  expect: |
+    crc16("123456789") = 0x29B1  (표준 검사값 0x29B1)
+    해석 결과 1915개: 맞음 1914, 틀린 값 1, 잃음 86
+  sources:
+    - path: chapters/05-serial-framing/README.md

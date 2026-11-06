@@ -1,0 +1,90 @@
+id: '13'
+slug: 13-launch-bag
+title: launch와 bag
+summary: launch는 노드를 이름·네임스페이스·리매핑과 함께 띄우고 감시해요. bag은 토픽을 기록했다가 그대로 다시 보내요.
+questions:
+- id: remap-topics
+  kind: choice
+  prompt: listener를 /robot1, /robot2에 띄우고 /robot2/listener만 chatter:=/robot1/chatter로 리매핑했어요. 토픽 목록이 왜 이럴까요?
+  log: |
+    /parameter_events
+    /robot1/chatter
+    /rosout
+  options:
+  - text: /robot2/listener가 네임스페이스 충돌로 구독에 실패해 /robot2/chatter를 만들지 못했다
+    feedback: 실패하지 않았어요. /robot2/listener도 80개 중 80개를 받았어요.
+  - text: 리매핑으로 /robot2/listener가 /robot1/chatter를 구독해서 /robot2/chatter가 생기지 않았다
+    correct: true
+    feedback: 맞아요. 코드는 chatter라고 부르지만 실제로는 /robot1/chatter예요. 그래서 토픽이 하나뿐이에요.
+  - text: launch가 상대 이름 chatter를 쓰는 노드들의 토픽을 하나로 합쳤다
+    feedback: launch는 명령줄을 만들어 프로세스를 띄울 뿐이에요. 리매핑이 -r chatter:=/robot1/chatter 인자로 넘어갔어요.
+  sources:
+  - path: chapters/13-launch-bag/README.md
+- id: respawn-count
+  kind: choice
+  prompt: flaky는 1.5초 뒤 exit code 1로 죽어요. respawn_delay=1.0, respawn_max_retries=2면 어떻게 됐을까요?
+  options:
+  - text: 약 1.0초 간격으로 다시 떠서 모두 2번 죽었다
+    feedback: 처음 1번에 다시 띄우기 2번이라 3번 죽었어요. 간격도 기동 시간이 더해져 약 1.68초였어요.
+  - text: 약 1.7초 뒤 다시 떠서 모두 3번 죽은 뒤 멈췄다
+    correct: true
+    feedback: 맞아요. 1.0초에 Python·rclpy 기동 약 0.7초가 더해졌어요. 상한이 없으면(기본 -1) 무한히 다시 띄워요.
+  - text: 약 1.7초 뒤 다시 떠서 Ctrl-C까지 계속 죽고 떴다
+    feedback: respawn_max_retries=2라서 다시 띄우기는 2번까지예요. 그 뒤로는 talker·listener만 계속 돌았어요.
+  sources:
+  - path: chapters/13-launch-bag/README.md
+- id: required-exit-code
+  kind: choice
+  prompt: on_exit=Shutdown()을 건 flaky가 exit code 1로 죽어 전체가 내려갔어요. ros2 launch의 종료 코드는 몇이었을까요?
+  log: |
+    [INFO] [launch]: process[flaky.py-2] was required: shutting down launched system
+  options:
+  - text: '0'
+    correct: true
+    feedback: 맞아요. 필수 노드가 죽어도 launch 자체는 성공으로 끝났어요. CI에서는 로그의 process has died를 확인해야 해요.
+    log: |
+      (ros2 launch 종료 코드 0)
+  - text: '1'
+    feedback: 죽은 노드의 코드를 물려받지 않아요. 이 실행에서 ros2 launch는 0으로 끝났어요.
+  - text: '130'
+    feedback: Ctrl-C로 멈춘 게 아니에요. launch가 스스로 talker에 SIGINT를 보내고 정상 종료했어요.
+  sources:
+  - path: chapters/13-launch-bag/README.md
+- id: mcap-default
+  kind: choice
+  prompt: 같은 50개 메시지를 -s 없이, 그리고 -s sqlite3로 기록했어요. 파일 크기가 이랬어요. 맞는 설명은 무엇일까요?
+  log: |
+    7125	bag_default_0.mcap
+    28672	bag_sqlite_0.db3
+  options:
+  - text: Jazzy 기본은 sqlite3이고, mcap은 압축을 켜서 작아졌다
+    feedback: "-s를 주지 않은 쪽이 Storage id: mcap이었어요. Jazzy 기본이 MCAP이에요."
+  - text: 기본은 mcap이고, sqlite3 쪽은 메시지를 두 번씩 기록했다
+    feedback: "둘 다 Messages: 50이에요. sqlite3는 페이지 단위로 자라고 표·색인 구조를 담아서 커요."
+  - text: 기본은 mcap이고, sqlite3는 페이지 단위로 자라 작은 기록에서 더 크다
+    correct: true
+    feedback: 맞아요. bag은 파일 하나가 아니라 디렉터리(*.mcap 또는 *.db3 + metadata.yaml)예요.
+  sources:
+  - path: chapters/13-launch-bag/README.md
+- id: play-no-delay
+  kind: choice
+  prompt: 구독자를 먼저 띄우고 --delay 없이 bag을 재생했더니 한 번은 이렇게 받았어요. 왜 앞부분을 잃었을까요?
+  log: |
+    [listener /robot1/listener] /robot1/chatter 받음 42 (처음 'hello 8', 마지막 'hello 49', 첫→끝 4.10s)
+  options:
+  - text: 기록기가 talker보다 늦게 붙어서 bag에 앞의 8개가 처음부터 기록되지 않았다
+    feedback: "bag info는 Messages: 50이었어요. 같은 bag을 --delay 1.0으로 재생하면 50개를 모두 받았어요."
+  - text: 디스커버리가 끝나기 전에 보낸 메시지를 VOLATILE이라 아무도 받지 못했다
+    correct: true
+    feedback: 맞아요. play는 발행자를 만들자마자 보내요. --delay 1.0을 주면 재생 전에 기다려서 50개를 다 받아요.
+  - text: 재생이 기록된 간격보다 빠르게 몰아 보내서 구독자 큐가 넘쳤다
+    feedback: -r 1.0으로 원래 속도였어요. -r 2.0에 --delay를 준 실행은 50개를 모두 받았어요.
+  sources:
+  - path: chapters/13-launch-bag/README.md
+run:
+  cmd: make -C chapters/13-launch-bag/code build run
+  expect: |
+    Storage id:        mcap
+    [listener /robot1/listener] /robot1/chatter 받음 50 (처음 'hello 0', 마지막 'hello 49', 첫→끝 2.40s)
+  sources:
+  - path: chapters/13-launch-bag/README.md

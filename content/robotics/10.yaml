@@ -1,0 +1,121 @@
+id: '10'
+slug: 10-qos
+title: QoS와 디스커버리
+summary: 발행자가 제공하는 QoS가 구독자 요구보다 약하면 연결이 안 돼요. depth는 보관·처리할 개수를 정해요.
+sim:
+  kind: topic-wiring
+  data:
+    topics:
+    - {name: /image_raw, type: sensor_msgs/msg/Image, publisher: camera, reliability: BEST_EFFORT}
+    - {name: /target, type: geometry_msgs/msg/Point, publisher: detector, reliability: RELIABLE}
+    - {name: /cmd_vel, type: geometry_msgs/msg/Twist, publisher: planner, reliability: RELIABLE}
+    - {name: /odom, type: nav_msgs/msg/Odometry, publisher: base, reliability: RELIABLE}
+    subscribers:
+    - {node: detector, wants: sensor_msgs/msg/Image, topic: /image_raw, reliability: RELIABLE}
+    - {node: planner, wants: geometry_msgs/msg/Point, topic: /odom, reliability: RELIABLE}
+    - {node: base, wants: geometry_msgs/msg/Twist, topic: /cmd_vel, reliability: RELIABLE}
+    outcomes:
+      type-mismatch:
+        text: 타입이 다른 토픽을 구독하면 경고 없이 0개를 받아요. 단서는 ros2 topic list -t에 한 토픽에 타입이 둘 붙는 것뿐이에요(09장).
+        measured: |
+          [int32_sub] mixed (std_msgs/msg/Int32) 받음 0
+          /mixed [std_msgs/msg/Int32, std_msgs/msg/String]
+      qos-incompatible:
+        text: BEST_EFFORT로 발행하는 토픽을 RELIABLE로 구독하면 연결되지 않아요. 타입 불일치와 달리 양쪽 노드에 경고가 찍혀요(10장).
+        measured: |
+          New publisher discovered on topic 'rel_BR', offering incompatible QoS. No messages will be received from it. Last incompatible policy: RELIABILITY
+          [sub_rel_BR] reliable/volatile/depth=10 받음 0 []
+      ok:
+        text: 타입과 QoS가 맞으면 메시지가 흘러요.
+        measured: |
+          [listener] chatter (std_msgs/msg/String) 받음 200
+  sources:
+  - path: chapters/09-ros2-topics/README.md
+  - path: chapters/10-qos/README.md
+questions:
+- id: rel-matrix
+  kind: choice
+  prompt: 발행자와 구독자의 reliability를 네 가지로 조합해 각 50개를 보냈어요. 0개를 받은 조합은 어느 것일까요?
+  options:
+  - text: 발행자 RELIABLE, 구독자 BEST_EFFORT
+    feedback: 이 조합은 연결돼요. 통신은 BEST_EFFORT로 동작하고, 같은 컨테이너 안이라 50개를 다 받았어요.
+  - text: 발행자 BEST_EFFORT, 구독자 BEST_EFFORT
+    feedback: 양쪽이 같으니 연결돼요. 50개를 모두 받았어요.
+  - text: 발행자 BEST_EFFORT, 구독자 RELIABLE
+    correct: true
+    feedback: 맞아요. 구독자가 요구한 RELIABLE을 발행자가 제공하지 못해 연결 자체가 안 돼요. 양쪽에 경고가 찍혀요.
+    log: |
+      [sub_rel_BR] reliable/volatile/depth=10 받음 0 []
+  - text: 네 조합 모두 50개를 받았다
+    feedback: 한 조합은 0개였어요. 요구가 제공보다 강하면 연결되지 않아요.
+  sources:
+  - path: chapters/10-qos/README.md
+- id: late-map
+  kind: choice
+  prompt: 발행자는 TRANSIENT_LOCAL, 늦게 띄운 구독자는 기본값(VOLATILE)이에요. 결과가 이랬어요. 무슨 일일까요?
+  log: |
+    [pub_dur_TV] reliable/transient_local/depth=10 보냄 5
+    [sub_dur_TV] reliable/volatile/depth=10 받음 0 []
+  options:
+  - text: 연결은 됐지만 과거 샘플을 받지 않았다. 경고도 없다
+    correct: true
+    feedback: 맞아요. 늦게 온 구독자가 과거 메시지를 받으려면 양쪽 모두 TRANSIENT_LOCAL이어야 해요. 그때 5개 중 5개를 받았어요.
+  - text: DURABILITY 불일치로 연결이 안 됐고 양쪽에 경고가 찍혔다
+    feedback: 그건 반대 조합(발행자 VOLATILE, 구독자 TRANSIENT_LOCAL)이에요. 이 조합은 연결은 돼요.
+  - text: 발행자 프로세스가 끝나 보관본이 사라졌다
+    feedback: 발행자는 --linger로 살아 있게 했어요. 같은 조건의 dur_TT 구독자는 5개를 받았어요.
+  sources:
+  - path: chapters/10-qos/README.md
+- id: tl-depth
+  kind: choice
+  prompt: 양쪽 RELIABLE + TRANSIENT_LOCAL이고, 발행자 depth 3, 구독자 depth 10이에요. 발행자가 0~9 열 개를 보낸 뒤 구독자가 합류했어요. 무엇을 받을까요?
+  options:
+  - text: '열 개 전부 [0, 1, ..., 9]'
+    feedback: 그건 양쪽 depth가 10일 때예요. 보관 개수는 발행자 depth가 정해요.
+  - text: '처음 세 개 [0, 1, 2]'
+    feedback: KEEP_LAST는 새 샘플이 오면 가장 오래된 것부터 버려요.
+  - text: '가장 최근 세 개 [7, 8, 9]'
+    correct: true
+    feedback: 맞아요. 발행자 depth가 보관 개수예요. 반대로 발행자 10, 구독자 1이면 최신 [9]만 처리됐어요.
+    log: |
+      [sub_depth_p3_s10] reliable/transient_local/depth=10 받음 3 [7, 8, 9]
+  sources:
+  - path: chapters/10-qos/README.md
+- id: slow-depth1
+  kind: choice
+  prompt: 100Hz로 100개를 보내고, 구독 콜백은 한 번에 0.05초 걸려요. 양쪽 RELIABLE인데 depth 1이면 왜 이렇게 될까요?
+  log: |
+    [sub_slow_d1] reliable/volatile/depth=1 받음 22 [0, 4, 9, 14, 19, '...', 82, 87, 92, 97, 99]
+  options:
+  - text: RELIABLE 재전송이 시간 안에 끝나지 않아 나머지를 잃었다
+    feedback: 재전송 문제가 아니에요. 처리 못 한 샘플이 depth 1 큐에서 새 값에 덮어써졌어요.
+  - text: 콜백이 느린 동안 depth 1 큐에서 처리 못 한 샘플이 덮어써졌다
+    correct: true
+    feedback: 맞아요. RELIABLE은 큐에 들어 있는 동안 잃지 않는다는 뜻이에요. depth 100이면 100개를 다 처리했지만 지연이 커졌어요.
+  - text: QoS 불일치로 일부 메시지만 통과했다
+    feedback: 양쪽 QoS가 같아요. 불일치였다면 0개였을 거예요.
+  sources:
+  - path: chapters/10-qos/README.md
+- id: info-count
+  kind: choice
+  prompt: ros2 topic info -v /rel_BR이 Publisher count 1, Subscription count 1을 보여요. 연결 여부는 어떻게 판단할까요?
+  options:
+  - text: 개수가 1:1이니 연결된 것이다
+    feedback: 불일치 쌍도 개수에는 잡혀요. 이 쌍은 0개를 받았어요.
+  - text: 끝점별 Reliability 줄을 비교하고 로그의 [WARN]을 확인한다
+    correct: true
+    feedback: 맞아요. 발행자 BEST_EFFORT, 구독자 RELIABLE이 보이면 불일치예요. 경고는 디스커버리 시점에 한 번 찍혀요.
+    log: |
+      Reliability: BEST_EFFORT
+      Reliability: RELIABLE
+  - text: History (Depth)가 UNKNOWN이면 연결이 안 된 것이다
+    feedback: Fast DDS가 디스커버리 정보에 history를 싣지 않아 CLI가 모를 뿐이에요. 연결과 상관없어요.
+  sources:
+  - path: chapters/10-qos/README.md
+run:
+  cmd: make -C chapters/10-qos/code build run
+  expect: |
+    [sub_rel_BR] reliable/volatile/depth=10 받음 0 []
+    [sub_dur_TT] reliable/transient_local/depth=10 받음 5 [0, 1, 2, 3, 4]
+  sources:
+  - path: chapters/10-qos/README.md

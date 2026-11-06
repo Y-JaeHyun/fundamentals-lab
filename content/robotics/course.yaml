@@ -1,0 +1,6 @@
+id: robotics
+title: 로봇 시스템 기초 체력
+summary: 임베디드에서 ROS2·제어까지, 로봇이 한 바퀴 도는 고리를 아래층부터 위층까지 만져 보며 익혀요.
+repo: https://github.com/Y-JaeHyun/robotics-fundamentals-kr
+sha: 0d61d295d481824a592a0b9c336cdddadc6bc7fc
+chapters: ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16']

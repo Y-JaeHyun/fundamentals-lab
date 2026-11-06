@@ -1,0 +1,90 @@
+id: '06'
+slug: 06-can
+title: CAN
+summary: CAN은 주소 없이 ID로 보내는 방송형 버스예요. vcan으로 소켓 API, 필터, 프레임 크기 규칙을 익혀요.
+questions:
+  - id: cansend-9bytes
+    kind: choice
+    prompt: classic CAN(mtu 16)에 9바이트를 cansend로 보냈어요. 무슨 일이 생겼을까요?
+    log: |
+      --- cansend vcan0 123#00112233445566778899  (9바이트)
+      종료 코드 0
+      vcan0  123   [8]  00 11 22 33 44 55 66 77
+    options:
+      - text: 커널이 EINVAL로 거부했지만 cansend가 오류를 숨기고 0을 돌려줬다
+        feedback: 커널까지 간 프레임은 8바이트였어요. cansend가 문자열을 해석하며 8바이트까지만 읽었어요.
+      - text: 앞 8바이트만 조용히 보내고 나머지 88 99는 오류 없이 버렸다
+        correct: true
+        feedback: 맞아요. 종료 코드만 보고 보냈다고 판단하면 데이터가 잘린 것을 몰라요. 프로그램에서 만들 때는 길이를 먼저 검사해요.
+      - text: 9바이트를 두 프레임으로 나눠 8바이트와 1바이트로 보냈다
+        feedback: candump에 프레임은 [8] 하나뿐이에요. 나머지 바이트는 그냥 사라졌어요.
+    sources:
+      - path: chapters/06-can/README.md
+  - id: filter
+    kind: choice
+    prompt: 0x0FF, 0x100, 0x105, 0x10F, 0x110, 0x200을 보냈어요. 필터 100:7F0으로 받으면 무엇이 남을까요?
+    options:
+      - text: 0x0FF, 0x100, 0x105, 0x10F, 0x110
+        feedback: 0x0FF & 0x7F0 = 0x0F0, 0x110 & 0x7F0 = 0x110이라 0x100과 달라 걸러져요.
+      - text: 0x100만
+        feedback: 마스크 7F0은 아래 4비트를 무시해요. 0x105, 0x10F도 통과해요.
+      - text: 0x100, 0x105, 0x10F
+        correct: true
+        feedback: 맞아요. 받은 ID & mask == id & mask이면 통과라 0x100~0x10F만 남아요. 반전 100~7F0은 나머지 세 개를 받아요.
+        log: |
+          [필터 id=0x100 mask=0x7F0] 받은 3개: 0x100 0x105 0x10F
+    sources:
+      - path: chapters/06-can/README.md
+  - id: vcan-order
+    kind: choice
+    prompt: vcan에서 0x300, 0x200, 0x100, 0x7FF, 0x000 순으로 보냈더니 그 순서 그대로 받았어요. 무엇을 뜻할까요?
+    log: |
+      받은 순서: 0x300 0x200 0x100 0x7FF 0x000
+    options:
+      - text: vcan에는 중재가 없어 ID 우선순위 설계를 vcan으로 검증할 수 없다
+        correct: true
+        feedback: 맞아요. vcan은 버스가 아니라 커널 안의 되돌림 장치라 경쟁도 중재도 없어요. 실제 버스라면 0x000이 먼저 나갔을 거예요.
+      - text: 한 노드가 보낸 것이라 중재가 필요 없었고, 다섯 노드라면 vcan도 중재한다
+        feedback: vcan에는 비트 타이밍·중재·ACK·오류 프레임이 아예 없어요. 노드 수와 상관없어요.
+      - text: CAN은 ID가 클수록 우선순위가 높아서 0x300이 먼저 왔다
+        feedback: CAN은 ID가 작을수록 우선순위가 높아요. 이 순서는 그냥 보낸 순서예요.
+    sources:
+      - path: chapters/06-can/README.md
+  - id: arbitration
+    kind: choice
+    prompt: 0x123, 0x0F5, 0x0F0 세 노드가 실제 버스에서 동시에 보내기 시작했어요(시뮬레이션). 누가 이길까요?
+    options:
+      - text: 0x123. 처음 몇 비트에서 1을 먼저 낸 쪽이 버스를 잡는다
+        feedback: 1은 열성이라 누가 0(우성)을 내면 버스가 0이 돼요. ID8에서 1을 낸 0x123이 먼저 물러났어요.
+      - text: 0x0F0. 처음 다른 비트에서 0을 낸 더 작은 ID가 이긴다
+        correct: true
+        feedback: 맞아요. ID2에서 0x0F5는 1, 0x0F0은 0을 내서 0x0F5가 물러났어요. 진 노드는 버스가 비면 다시 시도해요.
+        log: |
+          중재 승자: 0x0F0 (가장 작은 ID)
+      - text: 셋 다 충돌해 프레임이 깨지고, 모두 잠시 뒤 처음부터 다시 보낸다
+        feedback: CAN 중재는 비파괴예요. 이긴 노드의 프레임은 깨지지 않고 그대로 계속 가요.
+    sources:
+      - path: chapters/06-can/README.md
+  - id: vcan-mtu
+    kind: choice
+    prompt: 만들자마자 본 vcan0의 mtu가 16도 72도 아닌 2060이었어요. classic CAN 장비를 흉내 내려면 어떻게 할까요?
+    log: |
+      2: vcan0: <NOARP> mtu 2060 qdisc noop state DOWN mode DEFAULT group default qlen 1000
+    options:
+      - text: 그대로 둔다. mtu 2060이면 classic과 FD를 모두 자동으로 판별해 준다
+        feedback: 2060은 CAN XL 프레임 구조체 크기예요. classic 장비를 흉내 내려면 직접 바꿔야 해요.
+      - text: ip link set vcan0 mtu 16으로 직접 바꾼다
+        correct: true
+        feedback: 맞아요. 이 커널(7.0)의 vcan은 처음부터 CAN XL 크기로 만들어져요. 이 장은 6-0에서 16으로, 6-5에서 72로 바꿨어요.
+      - text: CAN_RAW_FD_FRAMES 옵션을 끄면 mtu가 자동으로 16이 된다
+        feedback: 그 옵션은 소켓이 FD 프레임을 주고받을지 정해요. 인터페이스 mtu는 ip link로 바꿔요.
+    sources:
+      - path: chapters/06-can/README.md
+run:
+  cmd: make -C chapters/06-can/code build run
+  expect: |
+    [필터 id=0x100 mask=0x7F0] 받은 3개: 0x100 0x105 0x10F
+    받은 순서: 0x300 0x200 0x100 0x7FF 0x000
+    중재 승자: 0x0F0 (가장 작은 ID)
+  sources:
+    - path: chapters/06-can/README.md

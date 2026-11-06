@@ -15,7 +15,7 @@
 | 코스 | 저장소 | 상태 |
 |---|---|---|
 | eBPF 기초 체력 | [ebpf-fundamentals-kr](https://github.com/Y-JaeHyun/ebpf-fundamentals-kr) | 17장 전체 문제, 시뮬레이션 6개(01·04·05·09·10·11) |
-| 로봇 시스템 기초 체력 | 준비 중 | 임베디드 → IoT 통신 → 리눅스 실시간 → ROS2 → 제어 |
+| 로봇 시스템 기초 체력 | [robotics-fundamentals-kr](https://github.com/Y-JaeHyun/robotics-fundamentals-kr) | 17장 전체 문제, 시뮬레이션: 10 ROS2 토픽 배선(타입·QoS 불일치) |
 
 ## 실측과 추정
 
@@ -25,6 +25,10 @@
 - **수치는 실측점 기반 추정 허용**: 슬라이더로 바꾸는 수치는 실측점 사이를 단순 모델로 계산할 수 있고, 그때는 **추정치** 배지가 붙습니다. 실측 범위 밖으로는 움직일 수 없습니다.
 - `npm run check-sources`가 콘텐츠의 모든 출처 경로와 인용한 로그·코드 줄이 코스 저장소의 **고정 커밋**에 그대로 있는지 확인합니다. CI에서도 돕니다.
 
+## GitHub Pages 설정
+
+처음 한 번, 저장소 Settings → Pages의 Source를 **GitHub Actions**로 둡니다. 이후 `main`에 push하면 테스트·출처 검사·빌드를 통과한 경우에만 배포됩니다.
+
 ## 개발
 
 ```bash
@@ -32,7 +36,7 @@ npm ci
 npm run dev                 # 로컬 서버
 npm test                    # 단위 테스트 (Vitest)
 npm run typecheck
-COURSE_SRC_EBPF=../ebpf-fundamentals-kr npm run check-sources   # 출처 검사
+COURSE_SRC_EBPF=../ebpf-fundamentals-kr COURSE_SRC_ROBOTICS=../robotics-fundamentals-kr npm run check-sources   # 출처 검사
 npm run build               # dist/ (GitHub Pages로 배포)
 ```
 
@@ -45,7 +49,7 @@ id: '05'
 slug: 05-verifier            # 코스 저장소의 chapters/ 디렉터리 이름
 title: Verifier
 summary: 120자 이내 요약
-sim:                          # 선택. 종류: order, verifier, hook-picker, packet-timeline, buffer-loss
+sim:                          # 선택. 종류: order, verifier, hook-picker, packet-timeline, buffer-loss, topic-wiring
   kind: verifier
   data: { ... }
   sources: [{ path: chapters/05-verifier/README.md }]

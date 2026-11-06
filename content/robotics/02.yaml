@@ -1,0 +1,94 @@
+id: '02'
+slug: 02-baremetal-boot
+title: 베어메탈 첫 부팅
+summary: Cortex-M은 리셋 때 벡터 테이블에서 SP와 PC를 읽어요. main 전에 .data 복사와 .bss 0 채우기가 필요해요.
+questions:
+  - id: reset-order
+    kind: order
+    prompt: Cortex-M이 리셋된 뒤 main까지 가는 순서대로 놓아 보세요.
+    items:
+      - 하드웨어가 0x00000000의 워드를 MSP(초기 스택 포인터)로 읽는다
+      - 하드웨어가 0x00000004의 워드를 PC(Reset_Handler 주소)로 읽는다
+      - Reset_Handler가 .data 초기값을 FLASH에서 RAM으로 복사한다
+      - Reset_Handler가 .bss를 0으로 채운다
+      - main()을 부른다
+    feedback: 스택 포인터를 하드웨어가 넣어 주기 때문에 시작 코드를 어셈블리 없이 C 함수로 쓸 수 있어요.
+    sources:
+      - path: chapters/02-baremetal-boot/README.md
+  - id: thumb-bit
+    kind: choice
+    prompt: 벡터 테이블의 Reset 칸이 이렇게 보여요. Reset_Handler는 0x58에 있는데 왜 0x59일까요?
+    log: |
+      0000 00000120 59000000 41000000 41000000  ... Y...A...A...
+      00000058 T Reset_Handler
+    options:
+      - text: 최하위 비트 1은 Thumb 표시라서 링커가 1을 더했다
+        correct: true
+        feedback: 맞아요. Cortex-M은 Thumb 명령어만 실행해요. 최하위 비트가 0이면 리셋 직후 UsageFault가 나요.
+      - text: 벡터 테이블이 1바이트 밀려 들어가서 모든 주소가 1씩 커졌다
+        feedback: 첫 워드 0x20010000(초기 SP)은 _estack 그대로예요. 밀린 게 아니라 함수 주소에만 Thumb 비트가 붙었어요.
+      - text: 0x59는 Reset_Handler 다음 명령어 주소라 첫 명령어를 건너뛴다
+        feedback: 첫 명령어를 건너뛰지 않아요. 실제 실행은 0x58부터이고, 1은 Thumb 상태를 뜻하는 표시예요.
+    sources:
+      - path: chapters/02-baremetal-boot/README.md
+  - id: nodata
+    kind: choice
+    prompt: .data 복사를 빼먹은 펌웨어예요. magic = 0xC0FFEE42로 써 놓았는데 왜 0일까요?
+    log: |
+      == 2) 실수 ① .data 복사를 빼먹음 (build/fw-nodata.elf)
+      magic(.data)=0x00000000  counter(.bss)=0
+      magic(.data)=0x00000001  counter(.bss)=0
+    options:
+      - text: 컴파일러가 쓰이지 않는 초기값이라 보고 최적화로 지웠다
+        feedback: 초기값은 이미지 안 FLASH의 0x326에 그대로 있어요. 옮기지 않았을 뿐이에요.
+      - text: 초기값은 FLASH에만 있고 아무도 RAM으로 옮기지 않았다
+        correct: true
+        feedback: 맞아요. 변수는 RAM(VMA 0x20000000)에서 쓰고 초기값은 FLASH(LMA 0x326)에 있어요. 그 뒤로는 RAM에 남은 값이 0, 1, 2로 이어졌어요.
+      - text: .bss 0 채우기가 .data 영역까지 덮어써서 0이 되었다
+        feedback: 이 변형은 .bss 루프는 그대로예요. .bss는 0x20000004부터라 magic(0x20000000)을 건드리지 않아요.
+    sources:
+      - path: chapters/02-baremetal-boot/README.md
+  - id: nobss
+    kind: choice
+    prompt: .bss 0 채우기를 빼먹었는데 boot 0에서는 counter가 0이었어요. 왜 첫 부팅에서는 안 보였을까요?
+    log: |
+      == 3) 실수 ② .bss 0 초기화를 빼먹음 (build/fw-nobss.elf)
+      magic(.data)=0xc0ffee42  counter(.bss)=0
+      magic(.data)=0xc0ffee42  counter(.bss)=100
+      magic(.data)=0xc0ffee42  counter(.bss)=200
+    options:
+      - text: .bss는 FLASH에 0이 저장돼 있어서 첫 부팅 때만 복사된다
+        feedback: .bss는 이미지에 내용이 없어요(크기만 있어요). FLASH에서 복사되는 건 .data예요.
+      - text: QEMU가 전원을 켤 때 RAM을 0으로 채워 줘서 우연히 맞았다
+        correct: true
+        feedback: 맞아요. 소프트웨어 리셋은 RAM을 지우지 않아 100, 200이 남아요. 실물 MCU는 전원 직후 RAM 값이 정해져 있지 않아 첫 부팅부터 쓰레기 값일 수 있어요.
+      - text: 첫 부팅에서는 하드웨어가 .bss 구간을 직접 0으로 지워 준다
+        feedback: 하드웨어가 해 주는 건 SP와 PC를 읽는 것뿐이에요. .bss 0 채우기는 시작 코드의 일이에요.
+    sources:
+      - path: chapters/02-baremetal-boot/README.md
+  - id: badsp
+    kind: choice
+    prompt: 초기 SP를 메모리가 없는 0x30000000으로 둔 펌웨어예요. UART 출력이 하나도 없는 이유는 무엇일까요?
+    log: |
+      Loaded reset SP 0x30000000 PC 0x59 from vector table
+      Invalid write at addr 0x2FFFFFF8, size 4, region '(null)', reason: rejected
+      ...BusFault with BFSR.STKERR
+      ...loaded new PC 0x41
+    options:
+      - text: UART 초기화 순서가 틀려 송신이 꺼진 채로 main만 계속 돌았다
+        feedback: main은 한 줄도 실행되지 않았어요. 문제는 그 전에 이미 터졌어요.
+      - text: QEMU가 벡터 테이블을 읽지 못해 PC가 0에서 멈췄다
+        feedback: 로그를 보면 SP=0x30000000, PC=0x59를 제대로 읽었어요. 그다음 스택에 쓰다가 실패했어요.
+      - text: 스택 쓰기부터 실패해 HardFault로 빠져 main에 닿지 못했다
+        correct: true
+        feedback: 맞아요. 예외 진입 때 레지스터를 쌓는 것도 실패(STKERR)해 Default_Handler(0x41)의 무한 루프에 빠졌고, 5초 뒤 timeout이 끊었어요.
+    sources:
+      - path: chapters/02-baremetal-boot/README.md
+run:
+  cmd: make -C chapters/02-baremetal-boot/code build run
+  expect: |
+    [boot 0] hello, bare metal
+    magic(.data)=0xc0ffee42  counter(.bss)=0
+    -> software reset (AIRCR.SYSRESETREQ)
+  sources:
+    - path: chapters/02-baremetal-boot/README.md

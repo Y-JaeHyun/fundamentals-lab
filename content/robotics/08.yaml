@@ -1,0 +1,71 @@
+id: '08'
+slug: 08-linux-realtime
+title: 리눅스 실시간성
+summary: 실시간은 빠르다는 뜻이 아니라 늦어도 이만큼 안에 깨어난다는 상한이에요. cyclictest로 정책별 꼬리를 봐요.
+questions:
+  - id: rt-starve
+    kind: choice
+    prompt: 같은 CPU에 SCHED_FIFO 50 부하를 7초 걸고 SCHED_OTHER 측정 스레드로 쟀어요. 이 결과는 무엇을 뜻할까요?
+    log: |
+      RESULT run=1 load=rt policy=SCHED_OTHER prio=0 samples=1 min_us=1000000 avg_us=5687938 p50_us=>20000 p99_us=>20000 p99.9_us=>20000 max_us=5687938 loadavg1=1.25
+    options:
+      - text: 측정 스레드가 1초마다 한 번씩만 깨어나서 표본이 1개다
+        feedback: min_us=1000000은 측정값이 아니라 cyclictest가 최소값을 시작할 때 넣는 초기값이에요.
+      - text: RT 부하가 CPU를 안 놓아 일반 스레드가 5.69초 굶었다
+        correct: true
+        feedback: 맞아요. 부하가 끝나서야 실행됐고 그사이 측정 시간이 지나 표본 1개로 끝났어요. RT 부하 앞의 일반 스레드에는 상한이 없다고 보고 설계해요.
+      - text: 컨테이너에 SYS_NICE 권한이 없어 측정 스레드가 시작하지 못했다
+        feedback: SCHED_OTHER 측정에는 그 권한이 필요 없어요. 두 번 다 약 5.69초로 같았고, 원인은 RT 부하예요.
+    sources:
+      - path: chapters/08-linux-realtime/README.md
+  - id: rt-priority
+    kind: choice
+    prompt: 같은 SCHED_FIFO 50 부하에서 측정 스레드를 SCHED_FIFO 80으로 바꿨더니 max가 수십~100µs였어요. 이 결과가 알려 주는 것은?
+    log: |
+      RESULT run=1 load=rt policy=SCHED_FIFO prio=80 samples=4000 min_us=4 avg_us=4 p50_us=4 p99_us=14 p99.9_us=27 max_us=100 loadavg1=1.51
+    options:
+      - text: SCHED_FIFO를 쓰기만 하면 어떤 부하가 있어도 지연 상한이 생긴다
+        feedback: 더 높은 우선순위의 RT 작업이 같은 CPU를 쓰면 그대로 밀려요. 직접 해보기 3처럼 부하를 90으로 올리면 결과가 달라져요.
+      - text: RT 부하는 같은 CPU의 실시간 스레드를 늦추지 않는다
+        feedback: 80이 50보다 높아서 선점한 거예요. 우선순위가 낮았다면 SCHED_OTHER처럼 기다려야 해요.
+      - text: 실시간 정책은 다른 실시간 작업보다 우선순위가 높을 때만 의미가 있다
+        correct: true
+        feedback: 맞아요. 80은 50보다 높아 즉시 선점했어요. 같은 CPU에 더 높은 우선순위로 바쁘게 도는 것이 없는지가 곧 최악 지연이에요.
+    sources:
+      - path: chapters/08-linux-realtime/README.md
+  - id: idle-worse
+    kind: choice
+    prompt: 이 측정에서는 부하가 없을 때(none)의 max가 일반 CPU 부하(cpu)일 때보다 컸어요. README는 어떻게 설명할까요?
+    log: |
+      HIST   run=1 load=none policy=SCHED_OTHER  <10us=12807 10-49us=2187 50-99us=6 100-999us=0 >=1000us=0
+      HIST   run=1 load=cpu policy=SCHED_OTHER  <10us=14934 10-49us=65 50-99us=0 100-999us=1 >=1000us=0
+    options:
+      - text: CPU가 놀면 깊은 절전 상태로 들어가 깨어나는 시간이 지연에 더해진 것으로 보인다
+        correct: true
+        feedback: 맞아요. 부하가 CPU를 깨어 있게 하면 이 시간이 사라져요. --default-system으로 절전 상태 제한을 끄고 재서 이 효과가 그대로 보였어요.
+      - text: 부하가 없으면 EEVDF가 측정 스레드의 우선순위를 낮춰서 늦게 돌린다
+        feedback: README는 EEVDF가 잠깐 깨는 스레드를 먼저 돌려 주는 경향을 cpu 조건의 설명으로 들었어요. none 조건의 원인으로는 절전 상태를 짚어요.
+      - text: 부하가 없을 때 cyclictest가 mlockall을 하지 않아 페이지 폴트가 났다
+        feedback: 모든 조건에서 -m(mlockall)을 같이 썼어요. 조건마다 달라지는 것은 CPU가 노는지 여부예요.
+    sources:
+      - path: chapters/08-linux-realtime/README.md
+  - id: max-variance
+    kind: choice
+    prompt: 같은 none/SCHED_FIFO 조건의 max가 반복 1에서 712µs, 반복 2에서 97µs였어요. 보고서에는 어떻게 써야 할까요?
+    options:
+      - text: 더 작은 97µs를 쓴다. 712µs는 측정 오류라 버리면 된다
+        feedback: 원인을 가려내지 않은 값을 오류로 버리면 최악값을 놓쳐요. max는 한 번의 짧은 측정으로 정할 수 없어요.
+      - text: 두 값의 평균 404µs를 이 조건의 최악 지연으로 쓴다
+        feedback: 실시간에서 문제는 평균이 아니라 최악값이에요. 두 max의 평균은 아무것도 보장하지 않아요.
+      - text: 대표 부하를 걸고 길게 반복해 재고, 측정 환경을 같이 적는다
+        correct: true
+        feedback: 맞아요. 이 측정은 다른 작업이 도는 공유 호스트에서 했어요. 절전 상태와 CPU 격리도 통제해야 최악값을 말할 수 있어요.
+    sources:
+      - path: chapters/08-linux-realtime/README.md
+run:
+  cmd: make -C chapters/08-linux-realtime/code build run
+  expect: |
+    /sys/kernel/realtime: 없음 (PREEMPT_RT 커널 아님)
+    cyclictest V 2.50
+  sources:
+    - path: chapters/08-linux-realtime/README.md

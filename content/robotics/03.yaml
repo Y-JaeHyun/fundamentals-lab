@@ -1,0 +1,76 @@
+id: '03'
+slug: 03-interrupts-timers
+title: 인터럽트와 타이머
+summary: SysTick이 1ms마다 틱을 세요. 바쁜 대기는 CPU 속도에 따라 틀어지고, ISR이 주기보다 길면 틱을 잃어요.
+questions:
+  - id: busy-wait
+    kind: choice
+    prompt: 25MHz 기준 "100ms"로 맞춘 바쁜 대기가 QEMU 시간 모드에 따라 이렇게 나왔어요. 무엇을 알 수 있을까요?
+    log: |
+      [2] busy-wait delay "100ms" : ref=53343 us  ticks=53
+      [2] busy-wait delay "100ms" : ref=6664 us  ticks=7
+    options:
+      - text: SysTick이 틀렸다. 틱 수가 실제 시간과 맞지 않는다
+        feedback: SysTick은 ticks=53, ticks=7로 기준 시계와 일치하게 셌어요. 틀린 건 바쁜 대기 쪽이에요.
+      - text: 바쁜 대기는 명령어 속도를 따라서 환경마다 시간이 다르다
+        correct: true
+        feedback: 맞아요. 바쁜 대기의 정확도는 보정한 그 환경에서만 보장돼요. 실물에서도 클럭, 플래시 대기 사이클, 최적화 수준에 따라 달라져요.
+      - text: QEMU가 subs/bne 루프를 최적화해 일부 바퀴를 건너뛰었다
+        feedback: icount에서 1,666,600개 명령어 × 32ns = 53.3ms가 정확히 나왔어요. 건너뛴 게 아니라 명령어당 시간이 달랐어요.
+    sources:
+      - path: chapters/03-interrupts-timers/README.md
+  - id: isr-under-period
+    kind: choice
+    prompt: ISR 추가 시간을 900µs로 늘렸어요(주기 1ms). 틱은 다 셌는데 무엇이 달라졌을까요?
+    log: |
+      [3] isr_extra_us=0  ticks in 100ms=100 (lost 0)  main_work=446328
+      [3] isr_extra_us=900  ticks in 100ms=100 (lost 0)  main_work=48291
+    options:
+      - text: 시계가 늦게 가서 100ms가 실제로는 190ms가 됐다
+        feedback: 틱은 100개로 다 셌어요(lost 0). 시계가 늦어지는 건 ISR이 주기보다 길 때예요.
+      - text: main의 몫이 약 10%로 줄었다
+        correct: true
+        feedback: 맞아요. ISR이 쓴 만큼 main의 몫이 줄어요. 로봇이라면 ISR은 다 돌았는데 제어 계산이 마감을 넘기는 상황이에요.
+      - text: ISR이 끝날 때마다 틱이 하나씩 중복으로 세졌다
+        feedback: 틱은 정확히 100개예요. 중복도 손실도 없고, main이 쓴 시간만 줄었어요.
+    sources:
+      - path: chapters/03-interrupts-timers/README.md
+  - id: isr-over-period
+    kind: choice
+    prompt: ISR이 1.5ms, 3ms일 때 틱을 잃었어요. 3ms에서 만료가 세 번인데 왜 34개가 남았을까요?
+    log: |
+      [3] isr_extra_us=1500  ticks in 100ms=67 (lost 33)  main_work=4462
+      [3] isr_extra_us=3000  ticks in 100ms=34 (lost 66)  main_work=4462
+    options:
+      - text: 대기(pending) 표시는 1비트라서 여러 번 와도 하나만 남는다
+        correct: true
+        feedback: 맞아요. 끝나면 꼬리 물기로 바로 다음 ISR이 시작돼 3ms마다 틱 하나만 세져요. 이 틱으로 재는 타임아웃·주기 실행이 전부 틀어져요.
+      - text: NVIC가 만료를 큐에 쌓았다가 main이 돌 때 한꺼번에 버린다
+        feedback: 큐가 아니라 1비트 표시예요. 그리고 main은 측정 창 첫 1ms 이후 한 번도 돌지 못했어요.
+      - text: SysTick 카운터가 24비트라 3ms 이상에서 넘쳐 값을 잃는다
+        feedback: 24비트 RVR 최대값은 25MHz에서 약 0.67초예요. 3ms와는 상관없어요.
+    sources:
+      - path: chapters/03-interrupts-timers/README.md
+  - id: wfi-wait
+    kind: choice
+    prompt: 틱 100개를 WFI로 기다렸더니 wakeups=100이었어요. 이 숫자는 무엇을 뜻할까요?
+    log: |
+      [1] wait 100 ticks with WFI : ref=100205 us  wakeups=100
+    options:
+      - text: CPU가 100ms 동안 쉬지 않고 루프를 100번 돌며 ticks를 확인했다
+        feedback: 쉬지 않고 돈 게 아니라 잠들어 있었어요. 루프를 계속 돌았다면 wakeups가 훨씬 컸을 거예요.
+      - text: 1ms마다 SysTick이 깨우면 ticks를 확인하고 다시 잤다
+        correct: true
+        feedback: 맞아요. 기다리는 동안 CPU는 명령어를 거의 실행하지 않았어요. 배터리로 도는 장치에서 소비 전력이 크게 달라져요.
+      - text: 틱 하나를 놓칠 때마다 다시 깨어나 총 100번 재시도했다
+        feedback: 잃은 틱은 없어요. ref=100205us로 기준 시계와 맞아요.
+    sources:
+      - path: chapters/03-interrupts-timers/README.md
+run:
+  cmd: make -C chapters/03-interrupts-timers/code build run
+  expect: |
+    SysTick reload=24999 (1ms @ 25MHz)
+    [3] isr_extra_us=1500  ticks in 100ms=67 (lost 33)  main_work=4462
+    A와 B 출력: 바이트 단위로 같다 (결정적)
+  sources:
+    - path: chapters/03-interrupts-timers/README.md

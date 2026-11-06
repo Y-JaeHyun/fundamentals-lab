@@ -1,0 +1,60 @@
+id: '01'
+slug: 01-big-picture
+title: 로봇 시스템 큰 그림
+summary: 로봇은 센서에서 구동까지 끝없이 도는 고리예요. 층마다 도는 곳과 주기, 마감이 달라요.
+questions:
+  - id: loop-order
+    kind: order
+    prompt: 로봇이 한 바퀴 도는 고리를 순서대로 놓아 보세요.
+    items:
+      - 센서 (엔코더·IMU·카메라·라이다)
+      - 인지 (위치 추정, 물체 인식)
+      - 계획 (어디로 갈지, 경로)
+      - 제어 (목표와 현재의 차이로 명령 만들기)
+      - 구동 (모터 드라이버·액추에이터)
+    feedback: 구동으로 세상이 움직이면 다시 센서로 돌아가요. 한 바퀴 도는 시간이 제어 주기이고, 늦거나 들쭉날쭉하면 로봇이 흔들리거나 목표를 지나쳐요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: strict-layer
+    kind: choice
+    prompt: 모터 전류 제어처럼 주기가 짧고 마감이 엄격한 루프는 보통 어디서 돌까요?
+    options:
+      - text: 리눅스 위 ROS2 노드. 계산이 크니 빠른 컴퓨터에 둔다
+        feedback: ROS2 노드는 계산은 크지만 기본 스케줄러가 마감을 보장하지 않아요. 경로 계획 같은 느린 일에 맞아요.
+      - text: 클라우드. MQTT로 명령을 받아 원격에서 계산한다
+        feedback: 클라우드·관제 층은 끊김을 전제로 설계해요. 엄격한 마감과는 거리가 멀어요.
+      - text: 마이크로컨트롤러(MCU)의 타이머 인터럽트 안
+        correct: true
+        feedback: 맞아요. 아래층일수록 빠르고 단순하고 마감이 엄격해요. MCU 펌웨어는 단순해서 검증하기 쉽고, 리눅스가 멈춰도 모터를 안전하게 세울 수 있어요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: realtime-meaning
+    kind: choice
+    prompt: 동료가 "CPU가 빠른 컴퓨터를 쓰면 실시간 문제는 해결돼요"라고 했어요. 어떻게 답할까요?
+    options:
+      - text: 맞다. 평균 처리 속도가 빠르면 마감도 저절로 지켜진다
+        feedback: 실시간은 평균 속도가 아니라 최악의 지연을 보장하는 거예요. 08장에서 직접 재요.
+      - text: 실시간은 평균 속도가 아니라 최악의 지연을 보장하는 것이다
+        correct: true
+        feedback: 맞아요. 엄격한 일을 리눅스 프로세스에 몰아 두면 다른 프로세스·인터럽트 때문에 주기가 흔들려요.
+      - text: 실시간은 ROS2를 쓰면 미들웨어가 알아서 보장해 준다
+        feedback: ROS2는 리눅스 위 프로세스들을 잇는 미들웨어예요. 마감이 엄격한 루프는 보통 그 아래(MCU)에 있어요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+  - id: link-layers
+    kind: choice
+    prompt: 층과 층 사이를 잇는 통신의 짝으로 맞는 것은 무엇일까요?
+    options:
+      - text: UART·CAN은 프로세스끼리, ROS2 토픽은 MCU와 컴퓨터를 잇는다
+        feedback: 반대예요. UART·CAN이 MCU와 컴퓨터를, ROS2 토픽이 프로세스끼리를 이어요.
+      - text: MQTT는 MCU와 모터 드라이버를, CAN은 로봇과 클라우드를 잇는다
+        feedback: MQTT는 로봇과 클라우드를 잇는 쪽이에요. CAN은 MCU와 컴퓨터 같은 장치 사이 버스예요.
+      - text: UART·CAN은 MCU와 컴퓨터를, MQTT는 로봇과 클라우드를 잇는다
+        correct: true
+        feedback: 맞아요. 그리고 ROS2 토픽은 프로세스끼리를 이어요. 이 저장소의 장 배치가 이 그림 그대로예요.
+    sources:
+      - path: chapters/01-big-picture/README.md
+run:
+  cmd: make -C chapters/09-ros2-topics/code build run
+  sources:
+    - path: chapters/01-big-picture/README.md
