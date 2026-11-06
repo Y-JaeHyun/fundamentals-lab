@@ -1,0 +1,10 @@
+id: '15'
+slug: 15-next-steps
+title: 다음 단계
+summary: 장마다 대응하는 오픈소스 프로젝트를 골라 코드를 읽어 보세요. 글을 쓸 땐 직접 돌린 결과와 버전을 붙여요.
+linksOnly: true
+questions: []
+run:
+  cmd: git clone https://github.com/Y-JaeHyun/ebpf-fundamentals-kr.git
+  sources:
+  - path: chapters/15-next-steps/README.md

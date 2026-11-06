@@ -1,0 +1,76 @@
+id: '13'
+slug: 13-observability
+title: 관측 실전 패턴
+summary: 프로세스 트리, TCP RTT·재전송, TLS 평문을 직접 봐요. 커널 안에서 거르고, 그 지점을 안 지나는 경로도 생각해요.
+questions:
+- id: srtt-shift
+  kind: choice
+  prompt: tcp_sock의 srtt_us 값을 µs 단위 RTT로 쓰려면 어떻게 해야 할까요?
+  options:
+  - text: 그대로 쓴다. 이름에 _us가 붙어 있다
+    feedback: 이름과 달리 8배 한 값으로 저장돼 있어요. 그대로 쓰면 8배 크게 나와요.
+  - text: ">> 3 해서 쓴다"
+    correct: true
+    feedback: 맞아요. 평활 RTT는 8배 값으로 저장돼 있어서 >> 3 해야 µs예요.
+  - text: 1000으로 나눠 쓴다
+    feedback: 단위 변환 문제가 아니에요. 8배로 저장된 값을 되돌려야 해요.
+  sources:
+  - path: chapters/13-observability/README.md
+- id: total-retrans
+  kind: choice
+  prompt: 연결이 닫힐 때 이렇게 찍혔어요. "재전송 14"는 무엇을 센 걸까요?
+  log: |
+    +1.591s  닫힘    192.0.2.1:44750 → 192.0.2.2:5000  srtt=20.2ms  재전송 14/739 세그먼트  보냄(ACK 받음) 1048578 B  받음 1 B  연결 유지 1.61s
+  options:
+  - text: 재전송 이벤트(tracepoint)가 불린 횟수
+    feedback: total_retrans는 이벤트 횟수가 아니에요. 재전송 한 번에 세그먼트 여러 개가 나갈 수 있어요.
+  - text: 이 연결에서 재전송한 세그먼트 수(누적)
+    correct: true
+    feedback: 맞아요. 재전송 큐의 skb에 MSS 여러 개가 들어 있으면 누적값이 한 번에 2 이상 늘기도 해요.
+  - text: 손실된 바이트 수
+    feedback: 바이트가 아니라 세그먼트 수예요. 739는 보낸 데이터 세그먼트 수예요.
+  sources:
+  - path: chapters/13-observability/README.md
+- id: close-port
+  kind: choice
+  prompt: inet_sock_set_state에서 새 상태가 TCP_CLOSE일 때 skc_num(로컬 포트)을 읽었더니 0이었어요. 왜일까요?
+  options:
+  - text: tcp_set_state()가 포트를 먼저 반납하고 맨 마지막에 상태를 바꿔서, 알림 시점엔 이미 포트가 지워져 있다
+    correct: true
+    feedback: 맞아요. 그래서 ESTABLISHED가 될 때 로컬 포트를 map에 같이 기록해 둬요.
+  - text: BPF에서는 소켓 필드를 읽을 수 없어서
+    feedback: tp_btf는 sock *를 커널 타입 그대로 받아서 필드를 읽을 수 있어요. 문제는 읽는 시점이에요.
+  - text: 클라이언트 쪽 소켓은 원래 로컬 포트가 없어서
+    feedback: 클라이언트도 로컬 포트가 있어요(이 예제에선 44750). 닫히는 시점에만 0이에요.
+  sources:
+  - path: chapters/13-observability/README.md
+- id: ssl-server-miss
+  kind: choice
+  prompt: SSL_read/SSL_write에 uprobe를 붙였는데 curl 쪽만 잡히고 openssl s_server -WWW 쪽은 하나도 안 잡혔어요. 왜일까요?
+  options:
+  - text: 서버가 다른 netns에 있어서 필터에 걸러졌다
+    feedback: 서버도 netns 필터에 들어 있었어요. 다른 이유예요.
+  - text: 서버는 다른 libssl을 쓴다
+    feedback: 같은 libssl.so.3을 써요.
+  - text: -WWW 모드는 BIO_f_ssl 경로로 내부 함수(ssl_read_internal 등)를 바로 불러서 SSL_read/SSL_write를 지나지 않는다
+    correct: true
+    feedback: 맞아요. 내부 함수는 동적 심볼로 공개되지 않아 이름으로 붙일 수도 없어요. 대상이 실제로 어느 함수를 거치는지 확인해야 해요.
+  sources:
+  - path: chapters/13-observability/README.md
+- id: ssl-read-order
+  kind: order
+  prompt: sslsniff가 SSL_read의 평문을 읽는 순서대로 놓아 보세요.
+  items:
+  - 진입 uprobe에서 버퍼 주소를 스레드 id를 key로 map에 저장
+  - SSL_read가 버퍼에 평문을 채우고 반환
+  - uretprobe에서 반환값만큼 버퍼를 복사
+  feedback: SSL_read의 버퍼는 함수가 끝나야 채워져요. 진입 시점에 읽으면 아직 비어 있어요.
+  sources:
+  - path: chapters/13-observability/README.md
+run:
+  cmd: make -C chapters/13-observability/code build run
+  expect: |
+    demo-password=hunter2
+    pcap 크기: 3700 B, 'hunter2' 등장 횟수: 0
+  sources:
+  - path: chapters/13-observability/README.md

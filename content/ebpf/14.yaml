@@ -1,0 +1,89 @@
+id: '14'
+slug: 14-debug-perf
+title: 디버깅과 성능
+summary: bpftool로 실행 중인 프로그램을 들여다보고, hook 종류별 비용을 재요. 이벤트 유실은 반드시 세요.
+questions:
+- id: trace-pipe
+  kind: choice
+  prompt: 공용 장비에서 bpf_printk 출력을 보려고 해요. 어떻게 보는 게 좋을까요?
+  options:
+  - text: cat /sys/kernel/tracing/trace_pipe
+    feedback: trace_pipe는 읽는 순간 버퍼를 비워요. 같은 버퍼를 보던 다른 사람·도구가 못 보게 돼요.
+  - text: /sys/kernel/tracing/trace 파일을 고유 접두사로 grep한다
+    correct: true
+    feedback: 맞아요. trace는 읽어도 지워지지 않아요. 전역 버퍼를 다른 사용자와 같이 쓰니 접두사를 붙여 골라요.
+  - text: bpftool prog tracelog
+    feedback: tracelog도 trace_pipe를 읽어서 읽은 줄이 버퍼에서 사라져요.
+  sources:
+  - path: chapters/14-debug-perf/README.md
+- id: link-exit-255
+  kind: choice
+  prompt: bpftool link show id N의 출력은 멀쩡한데 종료 코드가 255였어요. 어떻게 봐야 할까요?
+  log: |
+    4760: tracing  prog 666410
+    prog_type tracing  attach_type trace_fentry
+    (종료 코드 255)
+  options:
+  - text: link가 깨져 있으니 프로그램을 다시 붙여야 한다
+    feedback: link는 정상이에요. 출력에 attach 정보가 제대로 나와요.
+  - text: 권한이 부족하다는 뜻이니 root로 다시 돌린다
+    feedback: 권한 문제가 아니에요. 이 버전 bpftool의 성공 판단 코드 때문이에요.
+  - text: 이 버전 bpftool의 알려진 동작이라, --json 출력이 온전한지와 stderr 오류를 함께 확인한다
+    correct: true
+    feedback: 맞아요. id 하나를 지정한 경로에서는 errno가 ENOENT로 설정되지 않아 성공해도 -1이 될 수 있어요. 종료 코드만 보고 실패로 판단하지 마세요.
+  sources:
+  - path: chapters/14-debug-perf/README.md
+- id: hook-cost
+  kind: choice
+  prompt: 같은 본문의 BPF 프로그램을 getppid 진입에 hook만 바꿔 붙였어요. 가장 비싼 hook이 tracepoint인 이유는?
+  log: |
+    BPF 없음                                 271.6         -            -             -
+    tracepoint sys_enter_getppid           580.3    +308.7      1000003       99.8 ns
+    kprobe __do_sys_getppid                506.0    +234.4      1000004       91.0 ns
+    fentry __do_sys_getppid                403.4    +131.8      1000002       91.5 ns
+  options:
+  - text: syscalls tracepoint는 perf 경로를 거쳐 perf 버퍼 확보, 인자 복사, 레지스터 수집을 한 뒤 BPF를 부른다
+    correct: true
+    feedback: 맞아요. "tracepoint는 가볍다"는 일반론이 시스템 콜 tracepoint에는 맞지 않았어요. 뜨거운 경로라면 직접 재 보세요.
+  - text: tracepoint 쪽 BPF 본문이 더 길어서
+    feedback: 본문은 모두 같아요. BPF 1회 평균도 91~106ns로 비슷했어요. 다른 건 BPF까지 가는 경로예요.
+  - text: tracepoint는 JIT가 안 돼서 인터프리터로 돈다
+    feedback: 근거 없는 이야기예요. 차이는 hook에 이르는 커널 경로(perf_syscall_enter)에서 나와요.
+  sources:
+  - path: chapters/14-debug-perf/README.md
+- id: raw-tp-count
+  kind: choice
+  prompt: getppid를 100만 번 불렀는데 raw_tp 프로그램의 실행 수가 116만 번이었어요. 왜일까요?
+  log: |
+    raw_tp sys_enter(모든 시스템 콜)             440.4    +168.7      1162452      106.4 ns
+  options:
+  - text: 카운터가 중복으로 세는 버그다
+    feedback: 버그가 아니에요. raw_tp가 어디서 불리는지 생각해 보세요.
+  - text: raw_tp sys_enter는 모든 프로세스의 모든 시스템 콜에서 불려서, 다른 시스템 콜에서도 돌았다
+    correct: true
+    feedback: 맞아요. 측정에는 +169ns로 보이지만 그 비용은 호스트 전체가 나눠 내요. 번호로 직접 걸러야 해요.
+  - text: getppid가 내부에서 시스템 콜을 더 부른다
+    feedback: getppid는 커널에서 하는 일이 거의 없는 시스템 콜이에요. 다른 모드는 실행 수가 거의 100만이었어요.
+  sources:
+  - path: chapters/14-debug-perf/README.md
+- id: ringbuf-drop
+  kind: choice
+  prompt: fentry + ring buffer 모드에서 이렇게 나왔어요. 운영 도구라면 무엇을 해야 할까요?
+  log: |
+    ring buffer: 보내려던 이벤트 6500000, 받은 것 970749, 가득 차서 버린 것 5529251
+  options:
+  - text: reserve 실패를 세서 드러내고, 커널 안에서 집계해 보낼 양 자체를 줄인다
+    correct: true
+    feedback: 맞아요. 한 번에 하나씩 읽는 소비자는 수백 ns마다 생기는 이벤트를 못 따라가요. 유실은 소리 없이 생기니 꼭 세요.
+  - text: 유실은 드무니 무시해도 된다
+    feedback: 여기서는 보낸 것의 85%가 버려졌어요. 세지 않으면 모르고 지나가요.
+  - text: perf buffer로 바꾸면 유실이 사라진다
+    feedback: 이 장은 perf buffer를 재지 않았어요. 여기서 권하는 건 유실을 세고, 커널 안에서 집계해 보낼 양을 줄이는 거예요.
+  sources:
+  - path: chapters/14-debug-perf/README.md
+run:
+  cmd: make -C chapters/14-debug-perf/code build run
+  expect: |
+    === 14-3) 같은 시스템 콜에 hook 종류만 바꿔 붙였을 때 비용
+  sources:
+  - path: chapters/14-debug-perf/README.md

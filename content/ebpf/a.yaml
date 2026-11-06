@@ -1,0 +1,74 @@
+id: 'a'
+slug: A-kernel-versions
+title: '부록: 커널 버전별 기능 표'
+summary: 기능별 최소 커널 버전을 장 순서로 정리했어요. 버전은 출발점일 뿐, 대상 장비에서 직접 확인해요.
+questions:
+- id: ringbuf-version
+  kind: choice
+  prompt: ring buffer(BPF_MAP_TYPE_RINGBUF)는 몇 버전부터 쓸 수 있을까요?
+  options:
+  - text: '5.5'
+    feedback: 5.5는 fentry/fexit, tp_btf(BPF trampoline)가 들어온 버전이에요.
+  - text: '5.8'
+    correct: true
+    feedback: 맞아요. 5.8 미만 커널에서는 이 저장소의 ring buffer 예제가 동작하지 않아요. 없으면 perf buffer로 바꾸는 대안을 둘 수 있어요.
+  - text: '4.18'
+    feedback: 4.18은 BTF, AF_XDP, cgroup sendmsg4가 들어온 버전이에요.
+  - text: '5.11'
+    feedback: 5.11은 map 메모리를 memcg로 계산하게 된 버전이에요.
+  sources:
+  - path: chapters/A-kernel-versions/README.md
+- id: ubuntu2204
+  kind: choice
+  prompt: Ubuntu 22.04 기본 커널(5.15)에서 이 저장소 기준으로 빠지는 기능은 무엇일까요?
+  options:
+  - text: LSM-BPF
+    feedback: LSM-BPF는 5.7부터라 버전상 가능해요. 빌드 옵션과 부팅 인자는 따로 확인해요.
+  - text: fentry/fexit
+    feedback: fentry/fexit는 5.5부터예요.
+  - text: tcx(link 기반 TC)
+    correct: true
+    feedback: 맞아요. tcx는 6.6, netfilter 프로그램은 6.4부터라 5.15에는 없어요. 기존 TC(clsact qdisc) attach로 바꾸는 대안을 둘 수 있어요.
+  sources:
+  - path: chapters/A-kernel-versions/README.md
+- id: debian11-lsm
+  kind: choice
+  prompt: Debian 11(5.10)에서 LSM-BPF(5.7+)를 쓰려고 해요. 맞는 판단은?
+  options:
+  - text: 버전상 가능하지만 CONFIG_BPF_LSM=y인지, LSM 목록에 bpf가 있는지 따로 확인해야 한다
+    correct: true
+    feedback: 맞아요. 빌드 설정 CONFIG_LSM에 bpf가 없으면 부팅 인자 lsm=...,bpf로 넣어요(12장).
+  - text: 5.10은 5.7보다 높으니 바로 쓸 수 있다
+    feedback: 버전은 출발점일 뿐이에요. 빌드 옵션이 꺼져 있거나 LSM 목록에 bpf가 없으면 못 써요.
+  - text: LSM-BPF는 6.x부터라 불가능하다
+    feedback: LSM-BPF(BPF_PROG_TYPE_LSM)는 5.7부터예요.
+  sources:
+  - path: chapters/A-kernel-versions/README.md
+- id: rhel8-backport
+  kind: choice
+  prompt: RHEL 8의 커널은 4.18이에요. 이 커널에서 BPF 기능을 쓸 수 있는지 어떻게 판단할까요?
+  options:
+  - text: 4.18이니 표에서 4.18 이하 기능만 쓸 수 있다
+    feedback: 배포판 커널은 기능을 백포트하기도 해요. RHEL 8은 백포트가 많아 버전만으로 판단할 수 없어요.
+  - text: bpftool feature probe와 BTF 유무로 대상 장비에서 직접 확인한다
+    correct: true
+    feedback: 맞아요. 배포판은 백포트도 하고 빌드 옵션으로 끄기도 해요. 대상 장비에서 확인하는 게 정답이에요.
+  - text: uname -r만 보면 충분하다
+    feedback: 버전 번호만으로는 백포트나 꺼진 빌드 옵션을 알 수 없어요.
+  sources:
+  - path: chapters/A-kernel-versions/README.md
+- id: probe-attach
+  kind: choice
+  prompt: bpftool feature probe로 tcx 지원 여부도 알 수 있을까요?
+  options:
+  - text: 예. program_type 목록에 tcx가 나온다
+    feedback: feature probe는 프로그램·map 타입과 helper를 알려 주지만, tcx 같은 attach 방식은 알려 주지 않아요.
+  - text: 아니요. 작은 프로그램을 실제로 붙여 보고, EINVAL이나 EOPNOTSUPP로 실패하면 미지원으로 본다
+    correct: true
+    feedback: 맞아요. tcx·netkit·kprobe/uprobe multi 같은 attach 방식은 직접 붙여 보는 게 가장 확실해요.
+  sources:
+  - path: chapters/A-kernel-versions/README.md
+run:
+  cmd: sudo bpftool feature probe kernel | grep -E 'program_type|map_type'
+  sources:
+  - path: chapters/A-kernel-versions/README.md

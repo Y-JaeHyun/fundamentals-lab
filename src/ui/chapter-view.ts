@@ -32,7 +32,7 @@ function copyButton(text: string, target: HTMLElement): HTMLElement {
 function runPanel(course: Course, ch: Chapter): HTMLElement {
   const p = h('div', { class: 'stack' });
   const readme = `${course.repo}/tree/${course.sha}/chapters/${ch.slug}`;
-  p.append(h('p', { class: 'lede' }, '같은 상황을 내 리눅스에서 직접 재현해 봐요. 환경 준비는 저장소 00장을 따라요.'));
+  p.append(h('p', { class: 'lede' }, ch.linksOnly ? '이 장은 다음에 읽고 기여할 곳을 모은 읽을거리예요. 본문의 링크 지도를 따라가 보세요.' : '같은 상황을 내 리눅스에서 직접 재현해 봐요. 환경 준비는 저장소 00장을 따라요.'));
   if (ch.run) {
     const pre = h('pre', { class: 'code cmd' }, ch.run.cmd);
     p.append(h('div', { class: 'cmdrow' }, pre, copyButton(ch.run.cmd, pre)));
@@ -47,7 +47,7 @@ function runPanel(course: Course, ch: Chapter): HTMLElement {
 export function renderChapter(el: HTMLElement, course: Course, ch: Chapter, progress: ProgressStore): () => void {
   const cleanups: (() => void)[] = [];
   const pill = h('span', {});
-  const refreshPill = () => pill.replaceChildren(statusPill(progress.status(course.id, ch)));
+  const refreshPill = () => pill.replaceChildren(...(ch.linksOnly ? [] : [statusPill(progress.status(course.id, ch))]));
   refreshPill();
 
   el.append(

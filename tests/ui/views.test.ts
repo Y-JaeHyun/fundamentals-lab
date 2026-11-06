@@ -72,3 +72,11 @@ test('wide blocks scroll inside container', () => {
     expect(css, sel).toMatch(re);
   }
 });
+
+test('linksOnly chapter shows no status pill and a reading-list intro', () => {
+  const el = document.createElement('div');
+  const links = { ...ch, questions: [], linksOnly: true } as Chapter;
+  renderChapter(el, c, links, store());
+  expect(el.querySelector('.chapter-head .pill')).toBeNull();
+  expect(el.querySelector('.panel .lede')?.textContent).toContain('읽을거리');
+});
